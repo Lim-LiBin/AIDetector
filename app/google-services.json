@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "811514483802",
+    "project_id": "aidetector-50fe9",
+    "storage_bucket": "aidetector-50fe9.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:811514483802:android:3b0198d6a1c7ab5fe2f463",
+        "android_client_info": {
+          "package_name": "com.capstone.aidetector"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAVKW_6xVniB5hdIOs10n-pmE2Ll_ttb0E"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
