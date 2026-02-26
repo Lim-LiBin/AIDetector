@@ -32,6 +32,8 @@ import androidx.core.content.ContextCompat;
 
 import com.google.common.util.concurrent.ListenableFuture;
 
+import org.tensorflow.lite.support.image.TensorImage; // [변경됨: 라이브러리 추가]
+
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
@@ -48,10 +50,17 @@ public class MainActivity extends AppCompatActivity {
 
     private ActivityResultLauncher<String> galleryLauncher;
 
+    // [변경됨: 전처리용 변수 및 프로세서 추가]
+    private Bitmap currentBitmap = null;
+    private AiProcessor aiProcessor;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        // [변경됨: 프로세서 초기화]
+        aiProcessor = new AiProcessor();
 
         viewFinder = findViewById(R.id.viewFinder);
         galleryImageView = findViewById(R.id.galleryImageView);
@@ -75,10 +84,15 @@ public class MainActivity extends AppCompatActivity {
             } else {
                 // 검사 시작 로직
                 if (galleryImageView.getDrawable() == null) {
-                    Toast.makeText(this, "분석할 사진을 먼저 골라주세요!", Toast.LENGTH_SHORT).show(); //
+                    Toast.makeText(this, "분석할 사진을 먼저 골라주세요!", Toast.LENGTH_SHORT).show();
                 } else {
                     Toast.makeText(this, "딥페이크 분석을 시작합니다...", Toast.LENGTH_SHORT).show();
-                    // 여기에 나중에 224x224 리사이징 코드가 추가될 예정입니다.
+
+                    // [변경됨: AiProcessor 연동 및 전처리 실행]
+                    if (currentBitmap != null) {
+                        TensorImage processedImage = aiProcessor.processImage(currentBitmap);
+                        Log.d(TAG, "[체크리스트] 전처리 완료: " + processedImage.getWidth() + "x" + processedImage.getHeight());
+                    }
                 }
             }
         });
@@ -104,18 +118,25 @@ public class MainActivity extends AppCompatActivity {
     private void processGalleryImage(Uri uri) {
         viewFinder.setVisibility(View.GONE);
         galleryImageView.setVisibility(View.VISIBLE);
-        galleryImageView.setImageURI(uri);
-        btnCapture.setText("검사 시작"); // [문구 변경]
+        // galleryImageView.setImageURI(uri); // [변경됨: 비트맵 직접 세팅을 위해 주석 처리]
 
         Log.d(TAG, "선택한 사진 Uri: " + uri.toString()); // [체크리스트] Uri 로그
 
         try {
             Bitmap bitmap;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                bitmap = ImageDecoder.decodeBitmap(ImageDecoder.createSource(this.getContentResolver(), uri));
+                bitmap = ImageDecoder.decodeBitmap(ImageDecoder.createSource(this.getContentResolver(), uri), (decoder, info, source) -> {
+                    decoder.setMutableRequired(true); // [변경됨: 비트맵 수정을 위해 추가]
+                });
             } else {
                 bitmap = MediaStore.Images.Media.getBitmap(this.getContentResolver(), uri);
             }
+
+            // [변경됨: 변수에 저장 및 화면 출력]
+            currentBitmap = bitmap;
+            galleryImageView.setImageBitmap(currentBitmap);
+            btnCapture.setText("검사 시작");
+
             Log.d(TAG, "Bitmap 생성 성공: " + bitmap.getWidth() + "x" + bitmap.getHeight()); // [체크리스트] 비트맵 로그
         } catch (IOException e) { e.printStackTrace(); }
     }
@@ -127,11 +148,13 @@ public class MainActivity extends AppCompatActivity {
             public void onCaptureSuccess(@NonNull ImageProxy image) {
                 Bitmap bitmap = imageProxyToBitmap(image);
                 runOnUiThread(() -> {
+                    // [변경됨: 촬영된 비트맵 변수에 저장]
+                    currentBitmap = bitmap;
                     viewFinder.setVisibility(View.GONE);
                     galleryImageView.setVisibility(View.VISIBLE);
-                    galleryImageView.setImageBitmap(bitmap);
+                    galleryImageView.setImageBitmap(currentBitmap); // [변경됨: bitmap 대신 currentBitmap 사용]
                     btnCapture.setText("검사 시작"); // [문구 변경]
-                    Log.d(TAG, "카메라 Bitmap 생성 성공: " + bitmap.getWidth() + "x" + bitmap.getHeight()); // [체크리스트]
+                    Log.d(TAG, "카메라 Bitmap 생성 성공: " + currentBitmap.getWidth() + "x" + currentBitmap.getHeight()); // [변경됨: 로그]
                 });
                 image.close();
             }
