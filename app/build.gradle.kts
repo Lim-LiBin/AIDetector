@@ -1,14 +1,11 @@
 plugins {
     alias(libs.plugins.android.application)
-
     id("com.google.gms.google-services")
 }
 
 android {
     namespace = "com.capstone.aidetector"
-    compileSdk {
-        version = release(36)
-    }
+    compileSdk = 36 // 에러 방지를 위해 직접 숫자로 지정했습니다.
 
     defaultConfig {
         applicationId = "com.capstone.aidetector"
@@ -47,9 +44,14 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:33.9.0"))
     implementation("com.google.firebase:firebase-analytics")
 
+    // CameraX 라이브러리
     val cameraxVersion = "1.3.0"
     implementation("androidx.camera:camera-core:$cameraxVersion")
     implementation("androidx.camera:camera-camera2:$cameraxVersion")
     implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
     implementation("androidx.camera:camera-view:$cameraxVersion")
+
+    // 🔥 TensorFlow Lite 라이브러리 추가 (AiProcessor 에러 해결)
+    implementation("org.tensorflow:tensorflow-lite-support:0.4.4")
+    implementation("org.tensorflow:tensorflow-lite:2.14.0")
 }
