@@ -1,6 +1,7 @@
 package com.capstone.aidetector;
 
 import android.Manifest;
+import android.content.Intent; // [추가] 화면 전환을 위한 Intent 추가
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -12,7 +13,11 @@ import android.provider.MediaStore;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
+import android.widget.EditText;
+import android.widget.ImageButton;
 import android.widget.ImageView;
+import android.widget.ProgressBar;
+import android.widget.TextView; // [추가] 하단 탭 TextView 추가
 import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
@@ -36,11 +41,17 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 
 public class MainActivity extends AppCompatActivity {
-
     private PreviewView viewFinder;
     private ImageView galleryImageView;
+    private ProgressBar loadingIndicator; // 대기 화면 스피너
     private Button btnCapture;
+    private ImageButton btnSelect; // XML 타입에 맞춰 ImageButton으로 변경
+    private Button btnUrl;
     private ImageCapture imageCapture;
+
+    // [추가] 하단 탭 변수 선언
+    private TextView nav_history;
+    private TextView nav_settings;
 
     private static final String TAG = "GalleryTest";
     private static final int REQUEST_CODE_PERMISSIONS = 10;
@@ -51,12 +62,18 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
+        setContentView(R.layout.activity_main); // 주의: XML 파일 이름이 activity_home.xml이면 여기도 수정이 필요할 수 있습니다.
 
         viewFinder = findViewById(R.id.viewFinder);
         galleryImageView = findViewById(R.id.galleryImageView);
+        loadingIndicator = findViewById(R.id.loadingIndicator);
         btnCapture = findViewById(R.id.btnCapture);
-        Button btnSelect = findViewById(R.id.btnSelect);
+        btnSelect = findViewById(R.id.btnSelect);
+        btnUrl = findViewById(R.id.btnUrl);
+
+        // [추가] 하단 탭 뷰 찾기
+        nav_history = findViewById(R.id.nav_history);
+        nav_settings = findViewById(R.id.nav_settings);
 
         // 갤러리 결과 처리
         galleryLauncher = registerForActivityResult(
@@ -65,23 +82,63 @@ public class MainActivity extends AppCompatActivity {
         );
 
         // [왼쪽 버튼] 갤러리/카메라 선택창
-        btnSelect.setOnClickListener(v -> showSelectionDialog());
+        btnSelect.setOnClickListener(v -> {
+            applyClickAnimation(v);
+            showSelectionDialog();
+        });
 
         // [중앙 버튼] 상황에 따라 동작 변경
         btnCapture.setOnClickListener(v -> {
+            applyClickAnimation(v);
             String mode = btnCapture.getText().toString();
-            if (mode.equals("사진 찍기")) {
+
+            // [수정 1] "사진 찍기" -> 줄바꿈 대응을 위해 contains 사용
+            if (mode.contains("사진")) {
                 takePhoto();
             } else {
-                // 검사 시작 로직
-                if (galleryImageView.getDrawable() == null) {
-                    Toast.makeText(this, "분석할 사진을 먼저 골라주세요!", Toast.LENGTH_SHORT).show(); //
+                // [수정 2] 카메라 뷰어도 켜져있지 않은지 함께 검사하여 버그 방지
+                if (galleryImageView.getVisibility() == View.GONE && viewFinder.getVisibility() == View.GONE) {
+                    Toast.makeText(this, "분석할 사진을 먼저 골라주세요!", Toast.LENGTH_SHORT).show();
                 } else {
-                    Toast.makeText(this, "딥페이크 분석을 시작합니다...", Toast.LENGTH_SHORT).show();
-                    // 여기에 나중에 224x224 리사이징 코드가 추가될 예정입니다.
+                    Toast.makeText(this, "검사 시작합니다...", Toast.LENGTH_SHORT).show();
                 }
             }
         });
+
+        // [오른쪽 버튼] URL 입력 기능
+        btnUrl.setOnClickListener(v -> {
+            applyClickAnimation(v);
+            showUrlInputDialog();
+        });
+
+        // [추가] 하단 탭 클릭 이벤트 - 이력
+        nav_history.setOnClickListener(v -> {
+            Intent intent = new Intent(MainActivity.this, HistoryActivity.class);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
+            startActivity(intent);
+        });
+
+        // [추가] 하단 탭 클릭 이벤트 - 설정
+        nav_settings.setOnClickListener(v -> {
+            Intent intent = new Intent(MainActivity.this, SettingsActivity.class);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
+            startActivity(intent);
+        });
+    }
+
+    // --- 0.2초 살짝 눌리는 애니메이션 ---
+    private void applyClickAnimation(View view) {
+        view.animate()
+                .scaleX(0.9f)
+                .scaleY(0.9f)
+                .setDuration(100)
+                .withEndAction(() -> {
+                    view.animate()
+                            .scaleX(1.0f)
+                            .scaleY(1.0f)
+                            .setDuration(100)
+                            .start();
+                }).start();
     }
 
     private void showSelectionDialog() {
@@ -89,25 +146,46 @@ public class MainActivity extends AppCompatActivity {
         new AlertDialog.Builder(this)
                 .setTitle("사진 가져오기")
                 .setItems(options, (dialog, which) -> {
-                    if (which == 0) { // 카메라 선택
+                    // [수정 3] 미디어를 선택하면 스피너 숨김
+                    loadingIndicator.setVisibility(View.GONE);
+
+                    if (which == 0) {
                         viewFinder.setVisibility(View.VISIBLE);
                         galleryImageView.setVisibility(View.GONE);
-                        btnCapture.setText("사진 찍기"); // [문구 변경]
+                        btnCapture.setText("사진\n촬영");
                         if (allPermissionsGranted()) startCamera();
                         else ActivityCompat.requestPermissions(this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS);
-                    } else { // 갤러리 선택
+                    } else {
                         galleryLauncher.launch("image/*");
                     }
                 }).show();
+    }
+
+    // --- URL 텍스트 다이얼로그 호출 ---
+    private void showUrlInputDialog() {
+        final EditText input = new EditText(this);
+        input.setHint(" URL을 입력하세요");
+
+        new AlertDialog.Builder(this)
+                .setTitle("URL 입력")
+                .setView(input)
+                .setPositiveButton("확인", (dialog, which) -> {
+                    String url = input.getText().toString();
+                    loadingIndicator.setVisibility(View.GONE);
+                    Toast.makeText(this, "URL 확인 완료", Toast.LENGTH_SHORT).show();
+                    // 추후 다운로드 로직 연결
+                })
+                .setNegativeButton("취소", (dialog, which) -> dialog.cancel())
+                .show();
     }
 
     private void processGalleryImage(Uri uri) {
         viewFinder.setVisibility(View.GONE);
         galleryImageView.setVisibility(View.VISIBLE);
         galleryImageView.setImageURI(uri);
-        btnCapture.setText("검사 시작"); // [문구 변경]
+        btnCapture.setText("검사\n시작");
 
-        Log.d(TAG, "선택한 사진 Uri: " + uri.toString()); // [체크리스트] Uri 로그
+        Log.d(TAG, "선택한 사진 Uri: " + uri.toString()); //[체크리스트] Uri 로그
 
         try {
             Bitmap bitmap;
@@ -130,8 +208,8 @@ public class MainActivity extends AppCompatActivity {
                     viewFinder.setVisibility(View.GONE);
                     galleryImageView.setVisibility(View.VISIBLE);
                     galleryImageView.setImageBitmap(bitmap);
-                    btnCapture.setText("검사 시작"); // [문구 변경]
-                    Log.d(TAG, "카메라 Bitmap 생성 성공: " + bitmap.getWidth() + "x" + bitmap.getHeight()); // [체크리스트]
+                    btnCapture.setText("검사\n시작");
+                    Log.d(TAG, "카메라 Bitmap 생성 성공: " + bitmap.getWidth() + "x" + bitmap.getHeight());
                 });
                 image.close();
             }
