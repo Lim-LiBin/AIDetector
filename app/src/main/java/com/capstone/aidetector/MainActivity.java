@@ -1,31 +1,27 @@
 package com.capstone.aidetector;
 
 import android.Manifest;
+import android.content.Intent; // [추가] 화면 전환을 위한 Intent 추가
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.graphics.ImageDecoder;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Bundle;
-import android.provider.MediaStore;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
+import android.widget.EditText;
+import android.widget.ImageButton;
 import android.widget.ImageView;
+import android.widget.ProgressBar;
+import android.widget.TextView; // [추가] 하단 탭 TextView 추가
 import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.PickVisualMediaRequest;
 import androidx.activity.result.contract.ActivityResultContracts;
-import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.camera.core.CameraSelector;
 import androidx.camera.core.ImageCapture;
-import androidx.camera.core.ImageCaptureException;
-import androidx.camera.core.ImageProxy;
-import androidx.camera.core.Preview;
-import androidx.camera.lifecycle.ProcessCameraProvider;
 import androidx.camera.view.PreviewView;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
@@ -38,17 +34,29 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 
 public class MainActivity extends AppCompatActivity {
-
     private PreviewView viewFinder;
     private ImageView galleryImageView;
+    private ProgressBar loadingIndicator; // 대기 화면 스피너
     private Button btnCapture;
+    private ImageButton btnSelect; // XML 타입에 맞춰 ImageButton으로 변경
+    private Button btnUrl;
     private ImageCapture imageCapture;
+    private CameraHandler cameraHandler;
+
+    private static final String TAG = "AIDetector_Main";
+    // [추가] 하단 탭 변수 선언
+    private TextView nav_history;
+    private TextView nav_settings;
 
     private static final String TAG = "GalleryTest";
     private static final int REQUEST_CODE_PERMISSIONS = 10;
     private static final String[] REQUIRED_PERMISSIONS = {Manifest.permission.CAMERA};
 
-    private ActivityResultLauncher<String> galleryLauncher;
+    // Photo Picker 런처
+    private ActivityResultLauncher<PickVisualMediaRequest> pickMedia =
+            registerForActivityResult(new ActivityResultContracts.PickVisualMedia(), uri -> {
+                if (uri != null) processGalleryMedia(uri);
+            });
 
     // [변경됨: 전처리용 변수 및 프로세서 추가]
     private Bitmap currentBitmap = null;
@@ -57,16 +65,23 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
+        setContentView(R.layout.activity_main); // 주의: XML 파일 이름이 activity_home.xml이면 여기도 수정이 필요할 수 있습니다.
 
         // [변경됨: 프로세서 초기화]
         aiProcessor = new AiProcessor();
 
         viewFinder = findViewById(R.id.viewFinder);
         galleryImageView = findViewById(R.id.galleryImageView);
+        loadingIndicator = findViewById(R.id.loadingIndicator);
         btnCapture = findViewById(R.id.btnCapture);
-        Button btnSelect = findViewById(R.id.btnSelect);
+        btnSelect = findViewById(R.id.btnSelect);
+        btnUrl = findViewById(R.id.btnUrl);
 
+        // [추가] 하단 탭 뷰 찾기
+        nav_history = findViewById(R.id.nav_history);
+        nav_settings = findViewById(R.id.nav_settings);
+
+        btnSelect.setOnClickListener(v -> showSelectionDialog());
         // 갤러리 결과 처리
         galleryLauncher = registerForActivityResult(
                 new ActivityResultContracts.GetContent(),
@@ -74,117 +89,198 @@ public class MainActivity extends AppCompatActivity {
         );
 
         // [왼쪽 버튼] 갤러리/카메라 선택창
-        btnSelect.setOnClickListener(v -> showSelectionDialog());
-
-        // [중앙 버튼] 상황에 따라 동작 변경
-        btnCapture.setOnClickListener(v -> {
-            String mode = btnCapture.getText().toString();
-            if (mode.equals("사진 찍기")) {
-                takePhoto();
-            } else {
-                // 검사 시작 로직
-                if (galleryImageView.getDrawable() == null) {
-                    Toast.makeText(this, "분석할 사진을 먼저 골라주세요!", Toast.LENGTH_SHORT).show();
-                } else {
-                    Toast.makeText(this, "딥페이크 분석을 시작합니다...", Toast.LENGTH_SHORT).show();
-
-                    // [변경됨: AiProcessor 연동 및 전처리 실행]
-                    if (currentBitmap != null) {
-                        TensorImage processedImage = aiProcessor.processImage(currentBitmap);
-                        Log.d(TAG, "[체크리스트] 전처리 완료: " + processedImage.getWidth() + "x" + processedImage.getHeight());
-                    }
-                }
-            }
+        btnSelect.setOnClickListener(v -> {
+            applyClickAnimation(v);
+            showSelectionDialog();
         });
+
+        // 카메라 핸들러 초기화
+        cameraHandler = new CameraHandler(this, viewFinder);
+
+        btnCapture.setOnClickListener(v -> {
+    // 1. UI 디테일: 클릭 애니메이션 적용
+    applyClickAnimation(v);
+
+    String mode = btnCapture.getText().toString();
+
+    // 2. 모드 확인: "사진"이라는 글자가 포함되어 있으면 촬영 모드
+    if (mode.contains("사진")) {
+        takePhoto();
+    } else {
+        // 3. 분석 모드: MediaHandler에서 데이터 추출 (jihyeon 로직)
+        Bitmap bitmapToAnalyze = MediaHandler.getBitmap();
+        Uri uriToAnalyze = MediaHandler.getUri();
+
+        // 4. 예외 처리 및 AI 전처리 실행 (feature/ai-preprocessing 로직 통합)
+        if (bitmapToAnalyze != null) {
+            Log.d(TAG, "== 분석 시작 (MediaHandler 데이터 확인) ==");
+            Toast.makeText(this, "딥페이크 분석을 시작합니다...", Toast.LENGTH_SHORT).show();
+
+            try {
+                // [핵심] AiProcessor를 이용한 이미지 전처리 실행 (TensorImage 변환)
+                // currentBitmap 대신 bitmapToAnalyze를 사용하여 데이터 일관성 유지
+                TensorImage processedImage = aiProcessor.processImage(bitmapToAnalyze);
+                
+                Log.d(TAG, "[체크리스트] AI 전처리 완료: " + 
+                        processedImage.getWidth() + "x" + processedImage.getHeight());
+                
+                // TODO: 모델 추론(Inference) 메서드 호출 (예: runInference(processedImage))
+                
+            } catch (Exception e) {
+                Log.e(TAG, "전처리 중 오류 발생: " + e.getMessage());
+                Toast.makeText(this, "이미지 분석 준비 중 오류가 발생했습니다.", Toast.LENGTH_SHORT).show();
+            }
+
+        } else {
+            Toast.makeText(this, "분석할 사진을 먼저 골라주세요!", Toast.LENGTH_SHORT).show();
+        }
+    }
+});
+
+// [오른쪽 버튼] URL 입력 기능 (master 유지)
+btnUrl.setOnClickListener(v -> {
+    applyClickAnimation(v);
+    showUrlInputDialog();
+});
+
+// [하단 탭] 이력 및 설정 이동 (master 유지)
+nav_history.setOnClickListener(v -> {
+    Intent intent = new Intent(MainActivity.this, HistoryActivity.class);
+    intent.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
+    startActivity(intent);
+});
+
+nav_settings.setOnClickListener(v -> {
+    Intent intent = new Intent(MainActivity.this, SettingsActivity.class);
+    intent.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
+    startActivity(intent);
+});
+
+    // --- 0.2초 살짝 눌리는 애니메이션 ---
+    private void applyClickAnimation(View view) {
+        view.animate()
+                .scaleX(0.9f)
+                .scaleY(0.9f)
+                .setDuration(100)
+                .withEndAction(() -> {
+                    view.animate()
+                            .scaleX(1.0f)
+                            .scaleY(1.0f)
+                            .setDuration(100)
+                            .start();
+                }).start();
     }
 
     private void showSelectionDialog() {
-        String[] options = {"📷 카메라 촬영", "🖼️ 갤러리 불러오기"};
-        new AlertDialog.Builder(this)
-                .setTitle("사진 가져오기")
-                .setItems(options, (dialog, which) -> {
-                    if (which == 0) { // 카메라 선택
-                        viewFinder.setVisibility(View.VISIBLE);
-                        galleryImageView.setVisibility(View.GONE);
-                        btnCapture.setText("사진 찍기"); // [문구 변경]
-                        if (allPermissionsGranted()) startCamera();
-                        else ActivityCompat.requestPermissions(this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS);
-                    } else { // 갤러리 선택
-                        galleryLauncher.launch("image/*");
+    String[] options = {"📷 카메라 촬영", "🖼️ 갤러리 불러오기"};
+    new AlertDialog.Builder(this)
+            .setTitle("데이터 가져오기")
+            .setItems(options, (dialog, which) -> {
+                // 1. [master 반영] 새로운 미디어를 선택하므로 로딩 스피너는 숨김
+                loadingIndicator.setVisibility(View.GONE);
+
+                if (which == 0) {
+                    // 카메라 선택 시 뷰 전환
+                    viewFinder.setVisibility(View.VISIBLE);
+                    galleryImageView.setVisibility(View.GONE);
+                    
+                    // 2. [master 반영] 버튼 텍스트 줄바꿈 (UI 디자인 유지)
+                    btnCapture.setText("사진\n촬영");
+
+                    // 3. [jihyeon 반영] cameraHandler 객체를 통한 구조화된 실행
+                    if (allPermissionsGranted()) {
+                        cameraHandler.startCamera(this);
+                    } else {
+                        ActivityCompat.requestPermissions(this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS);
                     }
-                }).show();
+                } else {
+                    // 4. [jihyeon 반영] 구글 권장 최신 Photo Picker API 사용
+                    // 기존 galleryLauncher.launch("image/*")보다 보안과 UX 면에서 더 우수합니다.
+                    pickMedia.launch(new PickVisualMediaRequest.Builder()
+                            .setMediaType(ActivityResultContracts.PickVisualMedia.ImageAndVideo.INSTANCE)
+                            .build());
+                }
+            }).show();
+}
+
+    private void processGalleryMedia(Uri uri) {
+        Log.d(TAG, "선택한 미디어 Uri: " + uri.toString());
+
+        if (!MediaHandler.isSizeValid(this, uri)) {
+            Toast.makeText(this, "20MB 이하만 가능합니다.", Toast.LENGTH_LONG).show();
+            return;
+        }
+    // --- URL 텍스트 다이얼로그 호출 ---
+    private void showUrlInputDialog() {
+        final EditText input = new EditText(this);
+        input.setHint(" URL을 입력하세요");
+
+        new AlertDialog.Builder(this)
+                .setTitle("URL 입력")
+                .setView(input)
+                .setPositiveButton("확인", (dialog, which) -> {
+                    String url = input.getText().toString();
+                    loadingIndicator.setVisibility(View.GONE);
+                    Toast.makeText(this, "URL 확인 완료", Toast.LENGTH_SHORT).show();
+                    // 추후 다운로드 로직 연결
+                })
+                .setNegativeButton("취소", (dialog, which) -> dialog.cancel())
+                .show();
     }
 
     private void processGalleryImage(Uri uri) {
-        viewFinder.setVisibility(View.GONE);
-        galleryImageView.setVisibility(View.VISIBLE);
-        // galleryImageView.setImageURI(uri); // [변경됨: 비트맵 직접 세팅을 위해 주석 처리]
+    // UI 상태 초기화
+    viewFinder.setVisibility(View.GONE);
+    galleryImageView.setVisibility(View.VISIBLE);
+    btnCapture.setText("검사\n시작");
 
-        Log.d(TAG, "선택한 사진 Uri: " + uri.toString()); // [체크리스트] Uri 로그
+    Log.d(TAG, "선택한 사진 Uri: " + uri.toString());
 
-        try {
-            Bitmap bitmap;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                bitmap = ImageDecoder.decodeBitmap(ImageDecoder.createSource(this.getContentResolver(), uri), (decoder, info, source) -> {
-                    decoder.setMutableRequired(true); // [변경됨: 비트맵 수정을 위해 추가]
-                });
-            } else {
-                bitmap = MediaStore.Images.Media.getBitmap(this.getContentResolver(), uri);
-            }
+    // [통합] MediaHandler를 통해 비트맵 생성 (Master의 구조적 방식)
+    Bitmap bitmap = MediaHandler.processBitmap(this, uri);
+    
+    if (bitmap != null) {
+        // [Feature 반영] AI 전처리에 사용할 변수 업데이트
+        currentBitmap = bitmap;
+        
+        // [Master 반영] MediaHandler에 데이터 저장 및 UI 업데이트
+        MediaHandler.setMedia(bitmap, uri);
+        galleryImageView.setImageBitmap(bitmap);
 
-            // [변경됨: 변수에 저장 및 화면 출력]
-            currentBitmap = bitmap;
-            galleryImageView.setImageBitmap(currentBitmap);
-            btnCapture.setText("검사 시작");
+        Log.d(TAG, "Bitmap 생성 성공: " + bitmap.getWidth() + "x" + bitmap.getHeight());
 
-            Log.d(TAG, "Bitmap 생성 성공: " + bitmap.getWidth() + "x" + bitmap.getHeight()); // [체크리스트] 비트맵 로그
-        } catch (IOException e) { e.printStackTrace(); }
+        // [Master 반영] 영상 파일인 경우 로그 기록
+        String mimeType = getContentResolver().getType(uri);
+        if (mimeType != null && mimeType.startsWith("video")) {
+            Log.d(TAG, "영상 로드 성공 - URI: " + uri.toString() + " / 썸네일 추출 완료");
+        }
+    } else {
+        Toast.makeText(this, "이미지를 불러오는데 실패했습니다.", Toast.LENGTH_SHORT).show();
     }
+}
+      
+      private void takePhoto() {
+    // CameraHandler를 사용하여 캡처 로직을 캡슐화 (Master 방식 유지)
+    cameraHandler.takePhoto((bitmap, uri) -> {
+        runOnUiThread(() -> {
+            if (bitmap != null) {
+                // [Feature 반영] 촬영된 비트맵을 AI 전처리 변수에 저장
+                currentBitmap = bitmap;
+                
+                // [Master 반영] MediaHandler 업데이트 및 UI 전환
+                MediaHandler.setMedia(bitmap, uri);
+                
+                viewFinder.setVisibility(View.GONE);
+                galleryImageView.setVisibility(View.VISIBLE);
+                galleryImageView.setImageBitmap(currentBitmap);
+                btnCapture.setText("검사\n시작");
 
-    private void takePhoto() {
-        if (imageCapture == null) return;
-        imageCapture.takePicture(ContextCompat.getMainExecutor(this), new ImageCapture.OnImageCapturedCallback() {
-            @Override
-            public void onCaptureSuccess(@NonNull ImageProxy image) {
-                Bitmap bitmap = imageProxyToBitmap(image);
-                runOnUiThread(() -> {
-                    // [변경됨: 촬영된 비트맵 변수에 저장]
-                    currentBitmap = bitmap;
-                    viewFinder.setVisibility(View.GONE);
-                    galleryImageView.setVisibility(View.VISIBLE);
-                    galleryImageView.setImageBitmap(currentBitmap); // [변경됨: bitmap 대신 currentBitmap 사용]
-                    btnCapture.setText("검사 시작"); // [문구 변경]
-                    Log.d(TAG, "카메라 Bitmap 생성 성공: " + currentBitmap.getWidth() + "x" + currentBitmap.getHeight()); // [변경됨: 로그]
-                });
-                image.close();
+                Log.d(TAG, "[카메라] Bitmap 생성 성공: " + bitmap.getWidth() + "x" + bitmap.getHeight());
+                Log.d(TAG, "카메라 저장 완료 - Uri: " + (uri != null ? uri.toString() : "실패"));
             }
-            @Override
-            public void onError(@NonNull ImageCaptureException e) { Log.e(TAG, "촬영 실패", e); }
         });
-    }
-
-    // --- 카메라X 설정 및 유틸리티 메서드 ---
-    private void startCamera() {
-        ListenableFuture<ProcessCameraProvider> cameraProviderFuture = ProcessCameraProvider.getInstance(this);
-        cameraProviderFuture.addListener(() -> {
-            try {
-                ProcessCameraProvider cameraProvider = cameraProviderFuture.get();
-                Preview preview = new Preview.Builder().build();
-                preview.setSurfaceProvider(viewFinder.getSurfaceProvider());
-                imageCapture = new ImageCapture.Builder().build();
-                cameraProvider.unbindAll();
-                cameraProvider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, preview, imageCapture);
-            } catch (Exception e) { e.printStackTrace(); }
-        }, ContextCompat.getMainExecutor(this));
-    }
-
-    private Bitmap imageProxyToBitmap(ImageProxy image) {
-        ByteBuffer buffer = image.getPlanes()[0].getBuffer();
-        byte[] bytes = new byte[buffer.remaining()];
-        buffer.get(bytes);
-        return BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
-    }
-
+    });
+}
     private boolean allPermissionsGranted() {
         for (String permission : REQUIRED_PERMISSIONS) {
             if (ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) return false;
