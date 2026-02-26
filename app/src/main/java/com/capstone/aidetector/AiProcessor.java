@@ -22,30 +22,32 @@ public class AiProcessor {
     public TensorImage processImage(Bitmap bitmap) {
         if (bitmap == null) {
             Log.e(TAG, "전처리할 비트맵이 null입니다.");
-            return null; // [변경됨]
+            return null;
         }
 
         try {
-            // 이미지 전처리 도구 설정 (224x224 리사이즈 + 0~1.0 정규화)
+            // [수정] 비트맵 설정이 HARDWARE인 경우 TFLite가 로드하지 못하므로 소프트웨어 비트맵으로 변환
+            Bitmap softwareBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true);
+
             ImageProcessor imageProcessor = new ImageProcessor.Builder()
                     .add(new ResizeOp(224, 224, ResizeOp.ResizeMethod.BILINEAR))
-                    .add(new NormalizeOp(0.0f, 255.0f))
+                    .add(new NormalizeOp(0.0f, 255.0f)) // 0~1 사이로 정규화
                     .build();
 
             TensorImage tensorImage = new TensorImage(DataType.FLOAT32);
-            tensorImage.load(bitmap);
+            tensorImage.load(softwareBitmap); // 변환된 비트맵 로드
 
-            // 전처리 실행
             tensorImage = imageProcessor.process(tensorImage);
 
-            Log.d(TAG, "[이미지 전처리 완료] Bitmap → Tensor 변환 성공: " +
+            Log.d(TAG, "[이미지 전처리 완료] Tensor 변환 성공: " +
                     tensorImage.getWidth() + "x" + tensorImage.getHeight());
 
-            return tensorImage; // [변경됨: 결과물 반환]
+            return tensorImage;
 
         } catch (Exception e) {
+            // 여기서 에러가 발생하면 null을 반환함
             Log.e(TAG, "이미지 전처리 중 오류 발생: " + e.getMessage());
-            return null; // [변경됨]
+            return null;
         }
     }
 
