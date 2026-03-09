@@ -122,29 +122,40 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void startAnalysis() {
-        Bitmap bitmapToAnalyze = MediaHandler.getBitmap();
-        if (bitmapToAnalyze != null) {
-            Toast.makeText(this, "딥페이크 분석을 시작합니다...", Toast.LENGTH_SHORT).show();
-
-            try {
-                TensorImage processedImage = aiProcessor.processImage(bitmapToAnalyze);
-
-                // [중요] Null 체크 추가: 전처리가 성공했을 때만 로그와 분석 진행
-                if (processedImage != null) {
-                    Log.d(TAG, "전처리 완료: " + processedImage.getWidth() + "x" + processedImage.getHeight());
-
-                    // TODO: 여기에 추론(inference) 코드를 넣으세요.
-                    // runInference(processedImage);
-                } else {
-                    // 전처리 실패 시 사용자 알림
-                    Log.e(TAG, "전처리 결과가 null입니다. Logcat에서 'AiProcessor' 에러 메시지를 확인하세요.");
-                    Toast.makeText(this, "이미지 처리 중 문제가 발생했습니다.", Toast.LENGTH_SHORT).show();
-                }
-            } catch (Exception e) {
-                Log.e(TAG, "분석 시작 중 예외 발생", e);
-            }
-        } else {
+        // 1. 갤러리나 카메라에서 고른 원본 사진 주소 가져오기
+        Uri originalUri = MediaHandler.getUri();
+        if (originalUri == null) {
             Toast.makeText(this, "분석할 사진을 먼저 골라주세요!", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        Toast.makeText(this, "UI 테스트 화면으로 강제 이동합니다!", Toast.LENGTH_SHORT).show();
+
+        try {
+            // [팀원 코드가 완성되기 전까지 쓸 가짜 데이터]
+
+            // 2. 가짜 히트맵 비트맵 만들기 (대충 반투명한 빨간색 사각형으로 덮음)
+            Bitmap dummyHeatmap = Bitmap.createBitmap(224, 224, Bitmap.Config.ARGB_8888);
+            dummyHeatmap.eraseColor(android.graphics.Color.argb(128, 255, 0, 0));
+
+            // 3. 가짜 확률 설정 (88.5%로 설정해서 Fake 빨간색 UI가 잘 뜨는지 확인)
+            float fakeProbability = 24.5f;
+
+            // 4. AnalysisResult 객체에 가짜 데이터 담기
+            AnalysisResult result = new AnalysisResult(fakeProbability, dummyHeatmap);
+
+            // 5. Intent 만들어서 로딩 화면으로 먼저 쏘기!
+            // (여기서 ResultActivity.class 였던 걸 LoadingActivity.class로 변경)
+            Intent intent = new Intent(MainActivity.this, LoadingActivity.class);
+            intent.putExtra("analysis_result", result);
+            intent.putExtra("original_image_uri", originalUri.toString());
+
+            // 6. 결과 화면 띄우기
+            startActivity(intent);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            Toast.makeText(this, "테스트 중 에러: " + e.getMessage(), Toast.LENGTH_SHORT).show();
         }
     }
 
