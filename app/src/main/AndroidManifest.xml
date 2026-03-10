@@ -30,6 +30,9 @@
             android:name=".ResultActivity"
             android:exported="false" />
 
+        <activity
+            android:name=".LoadingActivity"
+            android:exported="false" />
     </application>
 
 </manifest>
