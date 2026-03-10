@@ -54,6 +54,7 @@ public class MainActivity extends AppCompatActivity {
     private ActivityResultLauncher<String> galleryLauncher;
     private Bitmap currentBitmap = null;
     private AiProcessor aiProcessor;
+    private Uri currentImageUri = null;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -105,43 +106,51 @@ public class MainActivity extends AppCompatActivity {
         try {
             TensorImage processedImage = aiProcessor.processImage(currentBitmap);
             if (processedImage != null) {
-                // [다중 출력 추론 구현] 확률값과 히트맵 행렬 동시 추출
                 Map<String, Object> results = aiProcessor.runInference(processedImage);
 
                 if (results != null) {
                     float score = (float) results.get("score");
                     float[][] heatmapMatrix = (float[][]) results.get("heatmap");
 
-                    // [ ] HeatmapProcessor의 createHeatmapImage 메서드를 호출하여 7x7 행렬 전달 및 비트맵 수신
-                    // → Bitmap heatmapBitmap = heatmapProcessor.createHeatmapImage(heatmapMatrix)
+                    // 1. 히트맵 비트맵 생성
                     HeatmapProcessor heatmapProcessor = new HeatmapProcessor();
                     Bitmap heatmapBitmap = heatmapProcessor.createHeatmapImage(heatmapMatrix);
 
-                    // [ ] AnalysisResult 객체 생성 및 데이터 담기 (확률값과 리턴받은 비트맵 이미지)
-                    // → AnalysisResult result = new AnalysisResult(probability, heatmap)
-                    AnalysisResult result = new AnalysisResult(score, heatmapBitmap);
+                    // 2. [핵심] 0.0~1.0 소수점을 0~100 백분율로 변환
+                    // 0이 Real이므로, score 자체가 가짜일 확률(1에 가까울수록 가짜)이 됩니다.
+                    float fakeProbability = score * 100f;
 
-                    // [ ] FirebaseManager의 uploadAnalysisResult 메서드를 호출하여 최종 객체 전달
-                    // → firebaseManager.uploadAnalysisResult(result)
+                    // 3. 결과 객체 생성
+                    AnalysisResult result = new AnalysisResult(fakeProbability, heatmapBitmap);
+
+                    //Firebase
                     FirebaseManager firebaseManager = new FirebaseManager();
-                    firebaseManager.uploadAnalysisResult(result);
+                    firebaseManager.uploadAnalysisResult(result, currentBitmap);
 
-                    // [ ] 로그: [추론 및 시각화 완료] 확률: (값), 히트맵 이미지 생성 및 DB&결과 화면 전달 성공
-                    Log.i(TAG, "[추론 및 시각화 완료] 확률: " + score + ", 히트맵 이미지 생성 및 DB&결과 화면 전달 성공");
+                    // 4. 로그 확인
+                    Log.i(TAG, "[분석 완료] 가짜 확률: " + fakeProbability + "%");
 
-                    // [ ] ResultActivity.java로 Intent를 생성하여 AnalysisResult 객체 전달
+                    // 5. ResultActivity로 이동
                     Intent intent = new Intent(MainActivity.this, ResultActivity.class);
                     intent.putExtra("analysis_result", result);
+
+                    // [추가] 갤러리/카메라에서 선택된 이미지가 있다면 URI 전달
+                    // 팁: 전역 변수로 Uri를 관리하거나, 테스트를 위해 임시로 넘겨야 합니다.
+                    // 만약 URI가 없다면 ResultActivity에서 별도 처리가 필요합니다.
+                    if (currentImageUri != null) {
+                        intent.putExtra("original_image_uri", currentImageUri.toString());
+                    }
+
                     startActivity(intent);
                 }
             }
         } catch (Exception e) {
-            Log.e(TAG, "분석 및 전달 실패: " + e.getMessage());
-            Toast.makeText(this, "오류가 발생했습니다.", Toast.LENGTH_SHORT).show();
+            Log.e(TAG, "분석 실패: " + e.getMessage());
         }
     }
 
     private void processGalleryImage(Uri uri) {
+        this.currentImageUri = uri;
         stopCamera();
         viewFinder.setVisibility(View.GONE);
         galleryImageView.setVisibility(View.VISIBLE);

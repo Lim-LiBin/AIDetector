@@ -18,54 +18,59 @@ public class FirebaseManager {
     private final FirebaseStorage storage = FirebaseStorage.getInstance();
     private final FirebaseFirestore db = FirebaseFirestore.getInstance();
 
-    public void uploadAnalysisResult(AnalysisResult result) {
-        if (result == null || result.heatmapBitmap == null) {
-            Log.e(TAG, "업로드 실패: 전달받은 결과값이 없습니다.");
+    public void uploadAnalysisResult(AnalysisResult result, Bitmap originalBitmap) {
+        if (result == null || result.heatmapBitmap == null || originalBitmap == null) {
+            Log.e(TAG, "업로드 실패: 결과값 또는 원본 이미지가 없습니다.");
             return;
         }
 
-        // 1. 포맷 변환: Bitmap -> ByteArray (JPEG)
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        result.heatmapBitmap.compress(Bitmap.CompressFormat.JPEG, 90, baos);
-        byte[] data = baos.toByteArray();
+        // 1. 원본 사진 업로드 준비
+        ByteArrayOutputStream originalBaos = new ByteArrayOutputStream();
+        originalBitmap.compress(Bitmap.CompressFormat.JPEG, 90, originalBaos);
+        byte[] originalData = originalBaos.toByteArray();
 
-        // 2. Storage 저장: heatmaps/ 폴더 내 고유 파일명 생성
-        String fileName = "result_" + System.currentTimeMillis() + ".jpg";
-        StorageReference storageRef = storage.getReference().child("heatmaps/" + fileName);
+        String timestamp = String.valueOf(System.currentTimeMillis());
+        String originalFileName = "original_" + timestamp + ".jpg";
+        StorageReference originalRef = storage.getReference().child("originals/" + originalFileName);
 
-        // 3. 업로드 실행 및 예외 처리
-        UploadTask uploadTask = storageRef.putBytes(data);
-        uploadTask.addOnSuccessListener(taskSnapshot -> {
-            // 4. URL 추출 성공 시 Firestore 기록
-            storageRef.getDownloadUrl().addOnSuccessListener(uri -> {
-                saveToFirestore(result.probability, uri.toString());
-            }).addOnFailureListener(e -> {
-                // [요구사항] 예외 처리: 에러 메시지 출력
-                Log.e(TAG, "URL 추출 실패: " + e.getMessage());
+        // 2. 원본 사진 업로드 시작
+        originalRef.putBytes(originalData).addOnSuccessListener(originalTask -> {
+            originalRef.getDownloadUrl().addOnSuccessListener(originalUri -> {
+
+                // 3. 원본 업로드 성공 시 히트맵 업로드 시작
+                uploadHeatmap(result, timestamp, originalUri.toString());
+
             });
-        }).addOnFailureListener(e -> {
-            // [요구사항] 예외 처리: 업로드 실패 시 에러 메시지 출력
-            Log.e(TAG, "업로드 실패: " + e.getMessage());
-        });
+        }).addOnFailureListener(e -> Log.e(TAG, "원본 업로드 실패: " + e.getMessage()));
     }
 
-    private void saveToFirestore(float probability, String heatmapUrl) {
-        // 데이터 매핑
+    private void uploadHeatmap(AnalysisResult result, String timestamp, String originalUrl) {
+        ByteArrayOutputStream heatmapBaos = new ByteArrayOutputStream();
+        result.heatmapBitmap.compress(Bitmap.CompressFormat.JPEG, 90, heatmapBaos);
+        byte[] heatmapData = heatmapBaos.toByteArray();
+
+        String heatmapFileName = "heatmap_" + timestamp + ".jpg";
+        StorageReference heatmapRef = storage.getReference().child("heatmaps/" + heatmapFileName);
+
+        heatmapRef.putBytes(heatmapData).addOnSuccessListener(heatmapTask -> {
+            heatmapRef.getDownloadUrl().addOnSuccessListener(heatmapUri -> {
+
+                // 4. 두 URL을 모두 가지고 Firestore에 최종 저장
+                saveToFirestore(result.probability, originalUrl, heatmapUri.toString());
+
+            });
+        }).addOnFailureListener(e -> Log.e(TAG, "히트맵 업로드 실패: " + e.getMessage()));
+    }
+
+    private void saveToFirestore(float probability, String originalUrl, String heatmapUrl) {
         Map<String, Object> data = new HashMap<>();
         data.put("probability", probability);
+        data.put("originalUrl", originalUrl); // 원본 URL 추가
         data.put("heatmapUrl", heatmapUrl);
         data.put("createdAt", Timestamp.now());
 
-        // 최종 저장: Firestore 'results' 컬렉션
-        db.collection("results")
-                .add(data)
-                .addOnSuccessListener(documentReference -> {
-                    // [요구사항] 로그 출력
-                    Log.d(TAG, "[Firebase 저장 완료] 이미지 URL 추출 및 DB 기록 성공");
-                })
-                .addOnFailureListener(e -> {
-                    // [요구사항] 예외 처리: DB 기록 실패 시 에러 메시지 출력
-                    Log.e(TAG, "DB 기록 실패: " + e.getMessage());
-                });
+        db.collection("results").add(data)
+                .addOnSuccessListener(ref -> Log.d(TAG, "[Firebase 저장 완료] 모든 이미지 및 DB 기록 성공"))
+                .addOnFailureListener(e -> Log.e(TAG, "DB 기록 실패: " + e.getMessage()));
     }
 }

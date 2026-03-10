@@ -87,6 +87,9 @@ public class AiProcessor {
                 }
             }
 
+            //HeatmapProcessor heatmapProcessor = new HeatmapProcessor();
+            //Bitmap heatmapBitmap = heatmapProcessor.createHeatmapImage(finalHeatmap);
+
             Map<String, Object> resultMap = new HashMap<>();
             resultMap.put("score", finalScore);
             resultMap.put("heatmap", finalHeatmap);
@@ -104,9 +107,8 @@ public class AiProcessor {
     public TensorImage processImage(Bitmap bitmap) {
         ImageProcessor imageProcessor = new ImageProcessor.Builder()
                 .add(new ResizeOp(224, 224, ResizeOp.ResizeMethod.BILINEAR))
-                // 🔥 수정: 0~255 입력을 -1.0 ~ 1.0 범위로 정규화
-                // 모델이 가짜 사진을 제대로 인식하게 만드는 핵심 수치입니다.
-                .add(new NormalizeOp(127.5f, 127.5f))
+                // 0.0 ~ 1.0 범위로 학습 코드와 일치시킴
+                .add(new NormalizeOp(0.0f, 255.0f))
                 .build();
 
         TensorImage tensorImage = new TensorImage(DataType.FLOAT32);
