@@ -1,30 +1,33 @@
 package com.capstone.aidetector;
 
 import android.graphics.Bitmap;
-import android.graphics.Canvas;
 import android.graphics.Color;
-import android.graphics.Paint;
 
 public class HeatmapProcessor {
-    // [v] HeatmapProcessor의 createHeatmapImage 메서드를 호출하여 7x7 행렬 전달 및 비트맵 수신
-    public Bitmap createHeatmapImage(float[][] heatmapMatrix) {
-        int size = 224;
-        Bitmap bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
-        Canvas canvas = new Canvas(bitmap);
-        Paint paint = new Paint();
+    //원본 이미지 및 전처리 규격과 동일하게 설정
+    private static final int TARGET_SIZE = 224;
+    private static final int MATRIX_SIZE = 7;
 
-        int cellSize = size / 7;
+    //7x7 행렬을 컬러 비트맵으로 변환하는 함수
+    public Bitmap createHeatmapImage(float[][] matrix) {
+        //7x7 크기의 비트맵 생성
+        Bitmap smallBitmap = Bitmap.createBitmap(MATRIX_SIZE, MATRIX_SIZE, Bitmap.Config.ARGB_8888);
 
-        for (int i = 0; i < 7; i++) {
-            for (int j = 0; j < 7; j++) {
-                float value = heatmapMatrix[i][j];
-                // 조작 확률이 높을수록(값이 클수록) 더 진한 빨간색으로 칠함
-                int alpha = (int) (Math.min(value * 255, 160));
-                paint.setColor(Color.argb(alpha, 255, 0, 0));
+        for (int y = 0; y < MATRIX_SIZE; y++) {
+            for (int x = 0; x < MATRIX_SIZE; x++) {
+                float value = matrix[y][x]; //0.0~1.0 사이의 값
 
-                canvas.drawRect(j * cellSize, i * cellSize, (j + 1) * cellSize, (i + 1) * cellSize, paint);
+                //수치에 맞는 색상 추출 로직
+                int alpha = (int) (value * 200);
+                int color = Color.argb(alpha, 255, 0, 0);
+
+                smallBitmap.setPixel(x, y, color);
             }
         }
-        return bitmap;
+
+        //7x7 데이터를 224x224 크기로 키우기
+        Bitmap finalBitmap = Bitmap.createScaledBitmap(smallBitmap, TARGET_SIZE, TARGET_SIZE, true);
+
+        return finalBitmap;
     }
 }

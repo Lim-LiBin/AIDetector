@@ -28,7 +28,7 @@ public class AiProcessor {
 
     public AiProcessor(Context context) {
         try {
-            // [x] NNAPI 가속 설정 (추론 속도 1.0s 이내 목표)
+            // [v] NnApiDelegate를 연동하여 가속 설정
             NnApiDelegate.Options nnApiOptions = new NnApiDelegate.Options();
             nnApiDelegate = new NnApiDelegate(nnApiOptions);
 
@@ -36,11 +36,10 @@ public class AiProcessor {
             options.addDelegate(nnApiDelegate);
             options.setNumThreads(4);
 
-            // [x] TFLite 모델 로드 및 초기화
+            // [v] 모델 로드 및 초기화
             MappedByteBuffer modelBuffer = loadModelFile(context, MODEL_PATH);
             interpreter = new Interpreter(modelBuffer, options);
 
-            // [x] 로그: [모델 로드 완료] Interpreter 및 NNAPI 설정 성공
             Log.d(TAG, "[모델 로드 완료] Interpreter 및 NNAPI 설정 성공");
         } catch (Exception e) {
             Log.e(TAG, "모델 로드 실패: " + e.getMessage());
@@ -54,39 +53,39 @@ public class AiProcessor {
         return fileChannel.map(FileChannel.MapMode.READ_ONLY, fileDescriptor.getStartOffset(), fileDescriptor.getDeclaredLength());
     }
 
-    // [x] 다중 출력 추론 구현
+    /**
+     * 다중 출력 추론 실행
+     * 결과: score(확률값), heatmap(7x7 행렬)
+     */
     public Map<String, Object> runInference(TensorImage tensorImage) {
         if (interpreter == null || tensorImage == null) return null;
 
-        // [x] 출력 버퍼 준비 (확률값: float[1][1], 히트맵: float[1][7][7][1280])
+        // 1. 출력 버퍼 준비
         float[][] probability = new float[1][1];
-        float[][][][] heatmapMatrix = new float[1][7][7][1280];
+        float[][][][] heatmapMatrix = new float[1][7][7][1280]; // 1280개 채널!
 
         Object[] inputs = { tensorImage.getBuffer() };
         Map<Integer, Object> outputs = new HashMap<>();
 
-        // 모델 인덱스 매핑 (0: 히트맵, 1: 확률값)
-        outputs.put(0, heatmapMatrix);
+        outputs.put(0, heatmapMatrix); // 모델에 따라 인덱스가 다를 수 있으니 확인 필수!
         outputs.put(1, probability);
 
         try {
-            long startTime = SystemClock.uptimeMillis();
-            // [x] 추론 실행
             interpreter.runForMultipleInputsOutputs(inputs, outputs);
-            long endTime = SystemClock.uptimeMillis();
 
-            // [x] 데이터 표준 규격 추출
-            float finalScore = probability[0][0]; // 0.0 ~ 1.0 사이의 실수
+            float finalScore = probability[0][0];
 
-            // 히트맵 행렬 가공 (7x7)
+            // 2. 히트맵 가공: 1280개 채널의 평균값 구하기
             float[][] finalHeatmap = new float[7][7];
             for (int i = 0; i < 7; i++) {
                 for (int j = 0; j < 7; j++) {
-                    finalHeatmap[i][j] = heatmapMatrix[0][i][j][0];
+                    float sum = 0;
+                    for (int c = 0; c < 1280; c++) {
+                        sum += heatmapMatrix[0][i][j][c]; // 모든 채널을 다 더함
+                    }
+                    finalHeatmap[i][j] = sum / 1280f; // 평균값 저장
                 }
             }
-
-            Log.i(TAG, "추론 시간: " + (endTime - startTime) + "ms / 결과 점수: " + finalScore);
 
             Map<String, Object> resultMap = new HashMap<>();
             resultMap.put("score", finalScore);
@@ -100,14 +99,13 @@ public class AiProcessor {
     }
 
     /**
-     * 파이썬 MobileNetV2 preprocess_input 규격 구현
+     * 이미지 전처리 (가장 중요한 부분)
      */
     public TensorImage processImage(Bitmap bitmap) {
-        //
         ImageProcessor imageProcessor = new ImageProcessor.Builder()
                 .add(new ResizeOp(224, 224, ResizeOp.ResizeMethod.BILINEAR))
-                // 🔥 파이썬 전처리 핵심: (x / 127.5) - 1.0 => NormalizeOp(127.5f, 127.5f)
-                // 이 설정이 되어야 가짜 사진에서 0.8 이상의 높은 점수가 나옵니다.
+                // 🔥 수정: 0~255 입력을 -1.0 ~ 1.0 범위로 정규화
+                // 모델이 가짜 사진을 제대로 인식하게 만드는 핵심 수치입니다.
                 .add(new NormalizeOp(127.5f, 127.5f))
                 .build();
 
