@@ -135,6 +135,20 @@ public class MainActivity extends AppCompatActivity {
 
                     // TODO: 여기에 추론(inference) 코드를 넣으세요.
                     // runInference(processedImage);
+
+                    //  테스트를 위해 가짜(Dummy) 데이터
+                    float dummyProbability = 0.88f; // 88% 확률로 가짜
+                    Bitmap dummyHeatmap = bitmapToAnalyze; // 테스트용으로 원본을 히트맵인 척 사용
+
+                    // 2.  결과 객체 생성
+                    AnalysisResult result = new AnalysisResult(dummyProbability, dummyHeatmap);
+
+                    // 3. Firebase에 업로드 호출!
+                    FirebaseManager firebaseManager = new FirebaseManager();
+                    firebaseManager.uploadAnalysisResult(result);
+
+                    // 화면에 알림
+                    Toast.makeText(this, "서버에 분석 결과를 기록 중입니다.", Toast.LENGTH_SHORT).show();
                 } else {
                     // 전처리 실패 시 사용자 알림
                     Log.e(TAG, "전처리 결과가 null입니다. Logcat에서 'AiProcessor' 에러 메시지를 확인하세요.");
