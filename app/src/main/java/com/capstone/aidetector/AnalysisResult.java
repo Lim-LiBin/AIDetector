@@ -5,8 +5,8 @@ import android.os.Parcel;
 import android.os.Parcelable;
 
 public class AnalysisResult implements Parcelable {
-    public float probability;    //확률값
-    public Bitmap heatmapBitmap;  //히트맵 비트맵(이미지)
+    public float probability;     //확률값
+    public Bitmap heatmapBitmap; //히트맵 비트맵(이미지)
 
     public AnalysisResult(float probability, Bitmap heatmapBitmap) {
         this.probability = probability;

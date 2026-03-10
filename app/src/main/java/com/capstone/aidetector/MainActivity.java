@@ -4,190 +4,211 @@ import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.ImageDecoder;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.provider.MediaStore;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
-import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.ImageView;
-import android.widget.ProgressBar;
-import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
-import androidx.activity.result.PickVisualMediaRequest;
 import androidx.activity.result.contract.ActivityResultContracts;
-import androidx.appcompat.app.AlertDialog;
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.camera.core.CameraSelector;
+import androidx.camera.core.ImageCapture;
+import androidx.camera.core.ImageCaptureException;
+import androidx.camera.core.ImageProxy;
+import androidx.camera.core.Preview;
+import androidx.camera.lifecycle.ProcessCameraProvider;
 import androidx.camera.view.PreviewView;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
+import com.google.common.util.concurrent.ListenableFuture;
+
 import org.tensorflow.lite.support.image.TensorImage;
 
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.util.Map;
+
 public class MainActivity extends AppCompatActivity {
+
     private PreviewView viewFinder;
     private ImageView galleryImageView;
-    private ProgressBar loadingIndicator;
     private Button btnCapture;
-    private ImageButton btnSelect;
-    private Button btnUrl;
-    private CameraHandler cameraHandler;
-    private AiProcessor aiProcessor;
+    private ImageButton btnSelect; // 왼쪽 갤러리 버튼
+    private ImageCapture imageCapture;
 
-    private static final String TAG = "AIDetector_Main";
-    private TextView nav_history, nav_settings;
-
+    private static final String TAG = "AiDetector_Main";
     private static final int REQUEST_CODE_PERMISSIONS = 10;
     private static final String[] REQUIRED_PERMISSIONS = {Manifest.permission.CAMERA};
 
-    // [수정] 메서드 이름을 아래 정의된 processGalleryImage와 일치시킴
-    private final ActivityResultLauncher<PickVisualMediaRequest> pickMedia =
-            registerForActivityResult(new ActivityResultContracts.PickVisualMedia(), uri -> {
-                if (uri != null) processGalleryImage(uri);
-            });
+    private ActivityResultLauncher<String> galleryLauncher;
+    private Bitmap currentBitmap = null;
+    private AiProcessor aiProcessor;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        // 1. 객체 및 뷰 초기화
-        aiProcessor = new AiProcessor();
+        // [TFLite 모델 로드 및 최적화 완료]
+        aiProcessor = new AiProcessor(this);
+
         viewFinder = findViewById(R.id.viewFinder);
         galleryImageView = findViewById(R.id.galleryImageView);
-        loadingIndicator = findViewById(R.id.loadingIndicator);
         btnCapture = findViewById(R.id.btnCapture);
         btnSelect = findViewById(R.id.btnSelect);
-        btnUrl = findViewById(R.id.btnUrl);
-        nav_history = findViewById(R.id.nav_history);
-        nav_settings = findViewById(R.id.nav_settings);
 
-        cameraHandler = new CameraHandler(this, viewFinder);
+        galleryLauncher = registerForActivityResult(
+                new ActivityResultContracts.GetContent(),
+                uri -> { if (uri != null) processGalleryImage(uri); }
+        );
 
-        // 2. 리스너 설정
-        btnSelect.setOnClickListener(v -> {
-            applyClickAnimation(v);
-            showSelectionDialog();
-        });
+        // 왼쪽 카메라 아이콘: 갤러리 실행
+        btnSelect.setOnClickListener(v -> galleryLauncher.launch("image/*"));
 
+        // 중앙 큰 버튼: 촬영 시작 또는 검사 수행
         btnCapture.setOnClickListener(v -> {
-            applyClickAnimation(v);
             String mode = btnCapture.getText().toString();
-            if (mode.contains("사진")) takePhoto();
-            else startAnalysis();
+            if (mode.contains("사진")) {
+                if (viewFinder.getVisibility() != View.VISIBLE) {
+                    startCameraMode();
+                } else {
+                    takePhoto();
+                }
+            } else {
+                if (currentBitmap == null) {
+                    Toast.makeText(this, "분석할 사진을 선택해주세요!", Toast.LENGTH_SHORT).show();
+                } else {
+                    // [시각화 & DB 연동 로직 실행]
+                    runDeepfakeAnalysisWithVisualization();
+                }
+            }
         });
-
-        btnUrl.setOnClickListener(v -> {
-            applyClickAnimation(v);
-            showUrlInputDialog();
-        });
-
-        nav_history.setOnClickListener(v -> navigateTo(HistoryActivity.class));
-        nav_settings.setOnClickListener(v -> navigateTo(SettingsActivity.class));
     }
 
-    // --- 헬퍼 메서드: UI 업데이트 및 데이터 저장 통합 ---
-    private void updateUIWithMedia(Bitmap bitmap, Uri uri) {
-        MediaHandler.setMedia(bitmap, uri); // 관리자 저장
+    /**
+     * [시각화 & DB 연동]
+     * 추론 결과를 바탕으로 히트맵 이미지를 생성하고 DB 업로드 및 화면 전환을 수행합니다.
+     */
+    private void runDeepfakeAnalysisWithVisualization() {
+        Toast.makeText(this, "분석 및 시각화 중...", Toast.LENGTH_SHORT).show();
+        try {
+            TensorImage processedImage = aiProcessor.processImage(currentBitmap);
+            if (processedImage != null) {
+                // [다중 출력 추론 구현] 확률값과 히트맵 행렬 동시 추출
+                Map<String, Object> results = aiProcessor.runInference(processedImage);
 
-        galleryImageView.setImageBitmap(bitmap);
-        viewFinder.setVisibility(View.GONE);
-        galleryImageView.setVisibility(View.VISIBLE);
-        btnCapture.setText("검사\n시작");
-        Log.d(TAG, "미디어 로드 및 UI 업데이트 완료");
+                if (results != null) {
+                    float score = (float) results.get("score");
+                    float[][] heatmapMatrix = (float[][]) results.get("heatmap");
+
+                    // [ ] HeatmapProcessor의 createHeatmapImage 메서드를 호출하여 7x7 행렬 전달 및 비트맵 수신
+                    // → Bitmap heatmapBitmap = heatmapProcessor.createHeatmapImage(heatmapMatrix)
+                    HeatmapProcessor heatmapProcessor = new HeatmapProcessor();
+                    Bitmap heatmapBitmap = heatmapProcessor.createHeatmapImage(heatmapMatrix);
+
+                    // [ ] AnalysisResult 객체 생성 및 데이터 담기 (확률값과 리턴받은 비트맵 이미지)
+                    // → AnalysisResult result = new AnalysisResult(probability, heatmap)
+                    AnalysisResult result = new AnalysisResult(score, heatmapBitmap);
+
+                    // [ ] FirebaseManager의 uploadAnalysisResult 메서드를 호출하여 최종 객체 전달
+                    // → firebaseManager.uploadAnalysisResult(result)
+                    FirebaseManager firebaseManager = new FirebaseManager();
+                    firebaseManager.uploadAnalysisResult(result);
+
+                    // [ ] 로그: [추론 및 시각화 완료] 확률: (값), 히트맵 이미지 생성 및 DB&결과 화면 전달 성공
+                    Log.i(TAG, "[추론 및 시각화 완료] 확률: " + score + ", 히트맵 이미지 생성 및 DB&결과 화면 전달 성공");
+
+                    // [ ] ResultActivity.java로 Intent를 생성하여 AnalysisResult 객체 전달
+                    Intent intent = new Intent(MainActivity.this, ResultActivity.class);
+                    intent.putExtra("analysis_result", result);
+                    startActivity(intent);
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "분석 및 전달 실패: " + e.getMessage());
+            Toast.makeText(this, "오류가 발생했습니다.", Toast.LENGTH_SHORT).show();
+        }
     }
-
-    // --- 주요 기능 메서드 ---
 
     private void processGalleryImage(Uri uri) {
-        if (!MediaHandler.isSizeValid(this, uri)) {
-            Toast.makeText(this, "20MB 이하만 가능합니다.", Toast.LENGTH_LONG).show();
-            return;
-        }
-        Bitmap bitmap = MediaHandler.processBitmap(this, uri);
-        if (bitmap != null) {
-            updateUIWithMedia(bitmap, uri);
-        }
+        stopCamera();
+        viewFinder.setVisibility(View.GONE);
+        galleryImageView.setVisibility(View.VISIBLE);
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                currentBitmap = ImageDecoder.decodeBitmap(ImageDecoder.createSource(this.getContentResolver(), uri), (decoder, info, src) -> decoder.setMutableRequired(true));
+            } else {
+                currentBitmap = MediaStore.Images.Media.getBitmap(this.getContentResolver(), uri);
+            }
+            galleryImageView.setImageBitmap(currentBitmap);
+            btnCapture.setText("검사 시작");
+        } catch (IOException e) { e.printStackTrace(); }
+    }
+
+    private void startCameraMode() {
+        viewFinder.setVisibility(View.VISIBLE);
+        galleryImageView.setVisibility(View.GONE);
+        if (allPermissionsGranted()) startCamera();
+        else ActivityCompat.requestPermissions(this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS);
     }
 
     private void takePhoto() {
-        cameraHandler.takePhoto((bitmap, uri) -> {
-            runOnUiThread(() -> {
-                if (bitmap != null) updateUIWithMedia(bitmap, uri);
-            });
+        if (imageCapture == null) return;
+        imageCapture.takePicture(ContextCompat.getMainExecutor(this), new ImageCapture.OnImageCapturedCallback() {
+            @Override
+            public void onCaptureSuccess(@NonNull ImageProxy image) {
+                currentBitmap = imageProxyToBitmap(image);
+                runOnUiThread(() -> {
+                    stopCamera();
+                    viewFinder.setVisibility(View.GONE);
+                    galleryImageView.setVisibility(View.VISIBLE);
+                    galleryImageView.setImageBitmap(currentBitmap);
+                    btnCapture.setText("검사 시작");
+                });
+                image.close();
+            }
+            @Override
+            public void onError(@NonNull ImageCaptureException e) { Log.e(TAG, "촬영 실패", e); }
         });
     }
 
-    private void startAnalysis() {
-        Bitmap bitmapToAnalyze = MediaHandler.getBitmap();
-        if (bitmapToAnalyze != null) {
-            Toast.makeText(this, "딥페이크 분석을 시작합니다...", Toast.LENGTH_SHORT).show();
-
+    private void startCamera() {
+        ListenableFuture<ProcessCameraProvider> cameraProviderFuture = ProcessCameraProvider.getInstance(this);
+        cameraProviderFuture.addListener(() -> {
             try {
-                TensorImage processedImage = aiProcessor.processImage(bitmapToAnalyze);
-
-                // [중요] Null 체크 추가: 전처리가 성공했을 때만 로그와 분석 진행
-                if (processedImage != null) {
-                    Log.d(TAG, "전처리 완료: " + processedImage.getWidth() + "x" + processedImage.getHeight());
-
-                    // TODO: 여기에 추론(inference) 코드를 넣으세요.
-                    // runInference(processedImage);
-
-                    // 화면에 알림
-                    Toast.makeText(this, "서버에 분석 결과를 기록 중입니다.", Toast.LENGTH_SHORT).show();
-                } else {
-                    // 전처리 실패 시 사용자 알림
-                    Log.e(TAG, "전처리 결과가 null입니다. Logcat에서 'AiProcessor' 에러 메시지를 확인하세요.");
-                    Toast.makeText(this, "이미지 처리 중 문제가 발생했습니다.", Toast.LENGTH_SHORT).show();
-                }
-            } catch (Exception e) {
-                Log.e(TAG, "분석 시작 중 예외 발생", e);
-            }
-        } else {
-            Toast.makeText(this, "분석할 사진을 먼저 골라주세요!", Toast.LENGTH_SHORT).show();
-        }
+                ProcessCameraProvider cameraProvider = cameraProviderFuture.get();
+                Preview preview = new Preview.Builder().build();
+                preview.setSurfaceProvider(viewFinder.getSurfaceProvider());
+                imageCapture = new ImageCapture.Builder().build();
+                cameraProvider.unbindAll();
+                cameraProvider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, preview, imageCapture);
+            } catch (Exception e) { e.printStackTrace(); }
+        }, ContextCompat.getMainExecutor(this));
     }
 
-    // --- 공통 UI/기타 메서드 ---
-    private void showSelectionDialog() {
-        String[] options = {"📷 카메라 촬영", "🖼️ 갤러리 불러오기"};
-        new AlertDialog.Builder(this)
-                .setTitle("데이터 가져오기")
-                .setItems(options, (dialog, which) -> {
-                    loadingIndicator.setVisibility(View.GONE);
-                    if (which == 0) {
-                        viewFinder.setVisibility(View.VISIBLE);
-                        galleryImageView.setVisibility(View.GONE);
-                        btnCapture.setText("사진\n촬영");
-                        if (allPermissionsGranted()) cameraHandler.startCamera(this);
-                        else ActivityCompat.requestPermissions(this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS);
-                    } else {
-                        pickMedia.launch(new PickVisualMediaRequest.Builder()
-                                .setMediaType(ActivityResultContracts.PickVisualMedia.ImageAndVideo.INSTANCE).build());
-                    }
-                }).show();
+    private void stopCamera() {
+        try {
+            ProcessCameraProvider cameraProvider = ProcessCameraProvider.getInstance(this).get();
+            cameraProvider.unbindAll();
+        } catch (Exception e) { e.printStackTrace(); }
     }
 
-    private void navigateTo(Class<?> activityClass) {
-        Intent intent = new Intent(this, activityClass);
-        intent.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
-        startActivity(intent);
-    }
-
-    private void showUrlInputDialog() {
-        final EditText input = new EditText(this);
-        input.setHint(" URL을 입력하세요");
-        new AlertDialog.Builder(this).setTitle("URL 입력").setView(input)
-                .setPositiveButton("확인", (dialog, which) -> Toast.makeText(this, "URL 확인 완료", Toast.LENGTH_SHORT).show())
-                .setNegativeButton("취소", (dialog, which) -> dialog.cancel()).show();
-    }
-
-    private void applyClickAnimation(View view) {
-        view.animate().scaleX(0.9f).scaleY(0.9f).setDuration(100)
-                .withEndAction(() -> view.animate().scaleX(1.0f).scaleY(1.0f).setDuration(100).start()).start();
+    private Bitmap imageProxyToBitmap(ImageProxy image) {
+        ByteBuffer buffer = image.getPlanes()[0].getBuffer();
+        byte[] bytes = new byte[buffer.remaining()];
+        buffer.get(bytes);
+        return BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
     }
 
     private boolean allPermissionsGranted() {
@@ -195,5 +216,11 @@ public class MainActivity extends AppCompatActivity {
             if (ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) return false;
         }
         return true;
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (aiProcessor != null) aiProcessor.close();
     }
 }

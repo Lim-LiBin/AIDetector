@@ -1,86 +1,123 @@
 package com.capstone.aidetector;
 
 import android.content.Context;
+import android.content.res.AssetFileDescriptor;
 import android.graphics.Bitmap;
-import android.media.MediaMetadataRetriever;
-import android.net.Uri;
+import android.os.SystemClock;
 import android.util.Log;
 
 import org.tensorflow.lite.DataType;
+import org.tensorflow.lite.Interpreter;
+import org.tensorflow.lite.nnapi.NnApiDelegate;
+import org.tensorflow.lite.support.common.ops.NormalizeOp;
 import org.tensorflow.lite.support.image.ImageProcessor;
 import org.tensorflow.lite.support.image.TensorImage;
-import org.tensorflow.lite.support.common.ops.NormalizeOp;
 import org.tensorflow.lite.support.image.ops.ResizeOp;
 
-import java.util.ArrayList; // [추가]
-import java.util.List;      // [추가]
+import java.io.FileInputStream;
+import java.nio.MappedByteBuffer;
+import java.nio.channels.FileChannel;
+import java.util.HashMap;
+import java.util.Map;
 
 public class AiProcessor {
     private static final String TAG = "AiProcessor";
+    private Interpreter interpreter;
+    private NnApiDelegate nnApiDelegate;
+    private static final String MODEL_PATH = "model.tflite";
 
-    // [변경됨: void에서 TensorImage로 반환 타입 변경]
-    public TensorImage processImage(Bitmap bitmap) {
-        if (bitmap == null) {
-            Log.e(TAG, "전처리할 비트맵이 null입니다.");
-            return null;
+    public AiProcessor(Context context) {
+        try {
+            // [x] NNAPI 가속 설정 (추론 속도 1.0s 이내 목표)
+            NnApiDelegate.Options nnApiOptions = new NnApiDelegate.Options();
+            nnApiDelegate = new NnApiDelegate(nnApiOptions);
+
+            Interpreter.Options options = new Interpreter.Options();
+            options.addDelegate(nnApiDelegate);
+            options.setNumThreads(4);
+
+            // [x] TFLite 모델 로드 및 초기화
+            MappedByteBuffer modelBuffer = loadModelFile(context, MODEL_PATH);
+            interpreter = new Interpreter(modelBuffer, options);
+
+            // [x] 로그: [모델 로드 완료] Interpreter 및 NNAPI 설정 성공
+            Log.d(TAG, "[모델 로드 완료] Interpreter 및 NNAPI 설정 성공");
+        } catch (Exception e) {
+            Log.e(TAG, "모델 로드 실패: " + e.getMessage());
         }
+    }
+
+    private MappedByteBuffer loadModelFile(Context context, String modelName) throws Exception {
+        AssetFileDescriptor fileDescriptor = context.getAssets().openFd(modelName);
+        FileInputStream inputStream = new FileInputStream(fileDescriptor.getFileDescriptor());
+        FileChannel fileChannel = inputStream.getChannel();
+        return fileChannel.map(FileChannel.MapMode.READ_ONLY, fileDescriptor.getStartOffset(), fileDescriptor.getDeclaredLength());
+    }
+
+    // [x] 다중 출력 추론 구현
+    public Map<String, Object> runInference(TensorImage tensorImage) {
+        if (interpreter == null || tensorImage == null) return null;
+
+        // [x] 출력 버퍼 준비 (확률값: float[1][1], 히트맵: float[1][7][7][1280])
+        float[][] probability = new float[1][1];
+        float[][][][] heatmapMatrix = new float[1][7][7][1280];
+
+        Object[] inputs = { tensorImage.getBuffer() };
+        Map<Integer, Object> outputs = new HashMap<>();
+
+        // 모델 인덱스 매핑 (0: 히트맵, 1: 확률값)
+        outputs.put(0, heatmapMatrix);
+        outputs.put(1, probability);
 
         try {
-            // [수정] 비트맵 설정이 HARDWARE인 경우 TFLite가 로드하지 못하므로 소프트웨어 비트맵으로 변환
-            Bitmap softwareBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true);
+            long startTime = SystemClock.uptimeMillis();
+            // [x] 추론 실행
+            interpreter.runForMultipleInputsOutputs(inputs, outputs);
+            long endTime = SystemClock.uptimeMillis();
 
-            ImageProcessor imageProcessor = new ImageProcessor.Builder()
-                    .add(new ResizeOp(224, 224, ResizeOp.ResizeMethod.BILINEAR))
-                    .add(new NormalizeOp(0.0f, 255.0f)) // 0~1 사이로 정규화
-                    .build();
+            // [x] 데이터 표준 규격 추출
+            float finalScore = probability[0][0]; // 0.0 ~ 1.0 사이의 실수
 
-            TensorImage tensorImage = new TensorImage(DataType.FLOAT32);
-            tensorImage.load(softwareBitmap); // 변환된 비트맵 로드
+            // 히트맵 행렬 가공 (7x7)
+            float[][] finalHeatmap = new float[7][7];
+            for (int i = 0; i < 7; i++) {
+                for (int j = 0; j < 7; j++) {
+                    finalHeatmap[i][j] = heatmapMatrix[0][i][j][0];
+                }
+            }
 
-            tensorImage = imageProcessor.process(tensorImage);
+            Log.i(TAG, "추론 시간: " + (endTime - startTime) + "ms / 결과 점수: " + finalScore);
 
-            Log.d(TAG, "[이미지 전처리 완료] Tensor 변환 성공: " +
-                    tensorImage.getWidth() + "x" + tensorImage.getHeight());
-
-            return tensorImage;
+            Map<String, Object> resultMap = new HashMap<>();
+            resultMap.put("score", finalScore);
+            resultMap.put("heatmap", finalHeatmap);
+            return resultMap;
 
         } catch (Exception e) {
-            // 여기서 에러가 발생하면 null을 반환함
-            Log.e(TAG, "이미지 전처리 중 오류 발생: " + e.getMessage());
+            Log.e(TAG, "추론 오류: " + e.getMessage());
             return null;
         }
     }
 
-    // 영상 분석의 경우 여러 프레임의 결과가 나오므로 List 형태로 반환하도록 구성하면 좋습니다.
-    public List<TensorImage> processVideo(Context context, Uri videoUri) {
-        if (videoUri == null) return null;
+    /**
+     * 파이썬 MobileNetV2 preprocess_input 규격 구현
+     */
+    public TensorImage processImage(Bitmap bitmap) {
+        //
+        ImageProcessor imageProcessor = new ImageProcessor.Builder()
+                .add(new ResizeOp(224, 224, ResizeOp.ResizeMethod.BILINEAR))
+                // 🔥 파이썬 전처리 핵심: (x / 127.5) - 1.0 => NormalizeOp(127.5f, 127.5f)
+                // 이 설정이 되어야 가짜 사진에서 0.8 이상의 높은 점수가 나옵니다.
+                .add(new NormalizeOp(127.5f, 127.5f))
+                .build();
 
-        List<TensorImage> processedFrames = new ArrayList<>(); // [추가]
-        MediaMetadataRetriever retriever = new MediaMetadataRetriever();
+        TensorImage tensorImage = new TensorImage(DataType.FLOAT32);
+        tensorImage.load(bitmap);
+        return imageProcessor.process(tensorImage);
+    }
 
-        try {
-            retriever.setDataSource(context, videoUri);
-            String durationStr = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
-            long durationMs = (durationStr != null) ? Long.parseLong(durationStr) : 0;
-
-            for (long i = 0; i < durationMs; i += 1000) {
-                // 1초 단위로 프레임 추출
-                Bitmap frame = retriever.getFrameAtTime(i * 1000, MediaMetadataRetriever.OPTION_CLOSEST);
-                if (frame != null) {
-                    // [변경됨: 위에서 수정한 processImage를 호출하여 리스트에 저장]
-                    TensorImage ti = processImage(frame);
-                    if (ti != null) {
-                        processedFrames.add(ti);
-                        Log.d(TAG, "[영상 분석 중] " + (i / 1000) + "초 지점 추출 및 전처리 완료");
-                    }
-                }
-            }
-            return processedFrames; // [추가]
-        } catch (Exception e) {
-            Log.e(TAG, "영상 분석 중 오류 발생: " + e.getMessage());
-            return null;
-        } finally {
-            try { retriever.release(); } catch (Exception ignored) {}
-        }
+    public void close() {
+        if (interpreter != null) interpreter.close();
+        if (nnApiDelegate != null) nnApiDelegate.close();
     }
 }
