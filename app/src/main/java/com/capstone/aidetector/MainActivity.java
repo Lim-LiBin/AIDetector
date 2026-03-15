@@ -15,6 +15,7 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.ImageButton;
 import android.widget.ImageView;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
@@ -31,6 +32,7 @@ import androidx.camera.view.PreviewView;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
+import com.capstone.aidetector.model.HistoryRecord;
 import com.google.common.util.concurrent.ListenableFuture;
 
 import org.tensorflow.lite.support.image.TensorImage;
@@ -95,6 +97,16 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         });
+        TextView navHistory = findViewById(R.id.nav_history);
+
+        navHistory.setOnClickListener(v -> {
+            // HistoryActivity로 이동하는 의도(Intent) 생성
+            Intent intent = new Intent(MainActivity.this, HistoryActivity.class);
+            startActivity(intent);
+
+            // 화면 전환 애니메이션을 넣고 싶다면 여기에 추가 (선택사항)
+            overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
+        });
     }
 
     /**
@@ -112,40 +124,50 @@ public class MainActivity extends AppCompatActivity {
                     float score = (float) results.get("score");
                     float[][] heatmapMatrix = (float[][]) results.get("heatmap");
 
-                    // 1. 히트맵 비트맵 생성
+                    // 1. 진짜 히트맵 비트맵 생성 (이 이미지는 서버에 업로드해야 함!)
                     HeatmapProcessor heatmapProcessor = new HeatmapProcessor();
                     Bitmap heatmapBitmap = heatmapProcessor.createHeatmapImage(heatmapMatrix);
 
-                    // 2. [핵심] 0.0~1.0 소수점을 0~100 백분율로 변환
-                    // 0이 Real이므로, score 자체가 가짜일 확률(1에 가까울수록 가짜)이 됩니다.
+                    // [v] 보관소에 저장 (ResultActivity가 꺼내 쓸 용도)
+                    BitmapHolder.heatmapBitmap = heatmapBitmap;
+
                     float fakeProbability = score * 100f;
 
-                    // 3. 결과 객체 생성
-                    AnalysisResult result = new AnalysisResult(fakeProbability, heatmapBitmap);
+                    // 2. [핵심] 목적에 따라 객체를 두 개로 나눕니다.
+                    // (1) uploadResult: 서버 전송용 (진짜 비트맵 포함)
+                    AnalysisResult uploadResult = new AnalysisResult(fakeProbability, heatmapBitmap);
 
-                    //Firebase
+                    // (2) intentResult: 화면 전환용 (용량 줄이기 위해 비트맵은 null)
+                    AnalysisResult intentResult = new AnalysisResult(fakeProbability, null);
+
+                    // 3. Firebase 업로드 시작 (진짜 데이터가 든 uploadResult를 줍니다!)
                     FirebaseManager firebaseManager = new FirebaseManager();
-                    firebaseManager.uploadAnalysisResult(result, currentBitmap);
+                    firebaseManager.uploadAnalysisResult(uploadResult, currentBitmap, new FirebaseManager.OnUploadCompleteListener() {
+                        @Override
+                        public void onComplete(HistoryRecord record) {
+                            // [v] 서버 저장이 완전히 끝나서 ID가 담긴 record가 도착하면 실행!
+                            Log.i(TAG, "[분석 및 저장 완료] 가짜 확률: " + fakeProbability + "%");
 
-                    // 4. 로그 확인
-                    Log.i(TAG, "[분석 완료] 가짜 확률: " + fakeProbability + "%");
+                            // 4. ResultActivity로 이동
+                            Intent intent = new Intent(MainActivity.this, ResultActivity.class);
 
-                    // 5. ResultActivity로 이동
-                    Intent intent = new Intent(MainActivity.this, ResultActivity.class);
-                    intent.putExtra("analysis_result", result);
+                            // 서버에서 받아온 record를 넘깁니다. (이게 있어야 바로 삭제 가능!)
+                            intent.putExtra("record", record);
+                            intent.putExtra("analysis_result", intentResult); // 가벼운 객체 전달
 
-                    // [추가] 갤러리/카메라에서 선택된 이미지가 있다면 URI 전달
-                    // 팁: 전역 변수로 Uri를 관리하거나, 테스트를 위해 임시로 넘겨야 합니다.
-                    // 만약 URI가 없다면 ResultActivity에서 별도 처리가 필요합니다.
-                    if (currentImageUri != null) {
-                        intent.putExtra("original_image_uri", currentImageUri.toString());
-                    }
+                            if (currentImageUri != null) {
+                                intent.putExtra("original_image_uri", currentImageUri.toString());
+                            }
 
-                    startActivity(intent);
+                            // 이제 모든 준비가 끝났으니 화면 전환!
+                            startActivity(intent);
+                        }
+                    });
                 }
             }
         } catch (Exception e) {
             Log.e(TAG, "분석 실패: " + e.getMessage());
+            Toast.makeText(this, "분석 중 오류가 발생했습니다.", Toast.LENGTH_SHORT).show();
         }
     }
 
