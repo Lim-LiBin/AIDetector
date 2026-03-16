@@ -95,6 +95,13 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         });
+
+        // 하단 '이력' 탭 클릭 시 HistoryActivity로 이동
+        View tabHistory = findViewById(R.id.nav_history);
+        tabHistory.setOnClickListener(v -> {
+            Intent intent = new Intent(MainActivity.this, HistoryActivity.class);
+            startActivity(intent);
+        });
     }
 
     /**
