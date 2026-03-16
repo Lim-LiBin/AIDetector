@@ -22,6 +22,8 @@ import android.widget.Toast;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
+import android.graphics.Bitmap;  // ← 추가!
+import android.graphics.BitmapFactory;  // ← 추가!
 
 public class ResultActivity extends AppCompatActivity {
 
@@ -84,6 +86,13 @@ public class ResultActivity extends AppCompatActivity {
                 String uriString = intent.getStringExtra("original_image_uri");
                 Uri imageUri = Uri.parse(uriString);
                 ivOriginalImage.setImageURI(imageUri);
+            }else if (intent.hasExtra("original_image_bytes")) {
+                // URL에서 가져온 경우 (byte array로 전달)
+                byte[] byteArray = intent.getByteArrayExtra("original_image_bytes");
+                if (byteArray != null) {
+                    Bitmap bitmap = BitmapFactory.decodeByteArray(byteArray, 0, byteArray.length);
+                    ivOriginalImage.setImageBitmap(bitmap);
+                }
             }
 
             // 2. 판별 결과 및 확률 세팅
