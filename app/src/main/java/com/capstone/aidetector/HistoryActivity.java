@@ -48,9 +48,6 @@ public class HistoryActivity extends AppCompatActivity {
         setupRecyclerView();
         checkEmptyState();
 
-        // DB 연동 시 아래 loadDummyData() 지우기!
-        loadDummyData();
-
         // 뷰 모드 전환 버튼 이벤트
         btnToggleView.setOnClickListener(v -> {
             boolean isCurrentlyGallery = adapter.isGalleryMode();
@@ -184,34 +181,4 @@ public class HistoryActivity extends AppCompatActivity {
                 })
                 .show();
     }
-
-    // =========================================================================
-    // 🚨 DB 연동시 지우기!
-    // =========================================================================
-    private void loadDummyData() {
-        List<HistoryRecord> dummyList = new ArrayList<>();
-
-        HistoryRecord record1 = new HistoryRecord("test_user", "Fake", 85.5f, "https://picsum.photos/200", "", com.google.firebase.Timestamp.now());
-        record1.setDocumentId("dummy_doc_1");
-        dummyList.add(record1);
-
-        HistoryRecord record2 = new HistoryRecord("test_user", "Fake", 92.1f, "https://picsum.photos/201", "", com.google.firebase.Timestamp.now());
-        record2.setDocumentId("dummy_doc_2");
-        dummyList.add(record2);
-
-        HistoryRecord record3 = new HistoryRecord("test_user", "Real", 12.3f, "https://picsum.photos/202", "", com.google.firebase.Timestamp.now());
-        record3.setDocumentId("dummy_doc_3");
-        dummyList.add(record3);
-
-        HistoryRecord record4 = new HistoryRecord("test_user", "Real", 4.5f, "https://picsum.photos/203", "", com.google.firebase.Timestamp.now());
-        record4.setDocumentId("dummy_doc_4");
-        dummyList.add(record4);
-
-        HistoryRecord record5 = new HistoryRecord("test_user", "Fake", 99.9f, "https://picsum.photos/204", "", com.google.firebase.Timestamp.now());
-        record5.setDocumentId("dummy_doc_5");
-        dummyList.add(record5);
-
-        updateData(dummyList);
-    }
-    // =========================================================================
 }
