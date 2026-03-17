@@ -131,15 +131,12 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         });
-        TextView navHistory = findViewById(R.id.nav_history);
 
-        navHistory.setOnClickListener(v -> {
-            // HistoryActivity로 이동하는 의도(Intent) 생성
+        // 하단 '이력' 탭 클릭 시 HistoryActivity로 이동
+        View tabHistory = findViewById(R.id.nav_history);
+        tabHistory.setOnClickListener(v -> {
             Intent intent = new Intent(MainActivity.this, HistoryActivity.class);
             startActivity(intent);
-
-            // 화면 전환 애니메이션을 넣고 싶다면 여기에 추가 (선택사항)
-            overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
         });
     }
 

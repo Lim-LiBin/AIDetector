@@ -1,6 +1,7 @@
 package com.capstone.aidetector.model;
-import java.util.Date;
 
+import com.google.firebase.Timestamp;
+import java.util.Date;
 import java.io.Serializable;
 
 public class HistoryRecord implements Serializable {
