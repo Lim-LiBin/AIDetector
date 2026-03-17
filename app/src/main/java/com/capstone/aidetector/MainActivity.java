@@ -15,7 +15,6 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.ImageButton;
 import android.widget.ImageView;
-import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
@@ -32,7 +31,6 @@ import androidx.camera.view.PreviewView;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
-import com.capstone.aidetector.model.HistoryRecord;
 import com.google.common.util.concurrent.ListenableFuture;
 
 import org.tensorflow.lite.support.image.TensorImage;
@@ -145,74 +143,20 @@ public class MainActivity extends AppCompatActivity {
      * 추론 결과를 바탕으로 히트맵 이미지를 생성하고 DB 업로드 및 화면 전환을 수행합니다.
      */
     private void runDeepfakeAnalysisWithVisualization() {
-        Toast.makeText(this, "분석 및 시각화 중...", Toast.LENGTH_SHORT).show();
-        try {
-            TensorImage processedImage = aiProcessor.processImage(currentBitmap);
-            if (processedImage != null) {
-                Map<String, Object> results = aiProcessor.runInference(processedImage);
+        // 1. 즉시 LoadingActivity로 이동
+        Intent intent = new Intent(MainActivity.this, LoadingActivity.class);
 
-                if (results != null) {
-                    float score = (float) results.get("score");
-                    float[][] heatmapMatrix = (float[][]) results.get("heatmap");
+        // 비트맵 전달 (byte array로 변환)
+        ByteArrayOutputStream stream = new ByteArrayOutputStream();
+        currentBitmap.compress(Bitmap.CompressFormat.JPEG, 80, stream);
+        byte[] byteArray = stream.toByteArray();
+        intent.putExtra("original_image_bytes", byteArray);
 
-                    // 1. 진짜 히트맵 비트맵 생성 (이 이미지는 서버에 업로드해야 함!)
-                    HeatmapProcessor heatmapProcessor = new HeatmapProcessor();
-                    Bitmap heatmapBitmap = heatmapProcessor.createHeatmapImage(heatmapMatrix);
-
-                    // [v] 보관소에 저장 (ResultActivity가 꺼내 쓸 용도)
-                    BitmapHolder.heatmapBitmap = heatmapBitmap;
-
-                    float fakeProbability = score * 100f;
-
-                    // 2. [핵심] 목적에 따라 객체를 두 개로 나눕니다.
-                    // (1) uploadResult: 서버 전송용 (진짜 비트맵 포함)
-                    AnalysisResult uploadResult = new AnalysisResult(fakeProbability, heatmapBitmap);
-
-                    // (2) intentResult: 화면 전환용 (용량 줄이기 위해 비트맵은 null)
-                    AnalysisResult intentResult = new AnalysisResult(fakeProbability, null);
-                  
-                    // [추가] 갤러리/카메라에서 선택된 이미지가 있다면 URI 전달
-                    // 팁: 전역 변수로 Uri를 관리하거나, 테스트를 위해 임시로 넘겨야 합니다.
-                    // 만약 URI가 없다면 ResultActivity에서 별도 처리가 필요합니다.
-                    if (currentImageUri != null) {
-                        intent.putExtra("original_image_uri", currentImageUri.toString());
-                    }else {
-                        // currentBitmap을 byte array로 변환해서 전달
-                        ByteArrayOutputStream stream = new ByteArrayOutputStream();
-                        currentBitmap.compress(Bitmap.CompressFormat.JPEG, 50, stream);
-                        byte[] byteArray = stream.toByteArray();
-                        intent.putExtra("original_image_bytes", byteArray);
-                    }
-
-                    // 3. Firebase 업로드 시작 (진짜 데이터가 든 uploadResult를 줍니다!)
-                    FirebaseManager firebaseManager = new FirebaseManager();
-                    firebaseManager.uploadAnalysisResult(uploadResult, currentBitmap, new FirebaseManager.OnUploadCompleteListener() {
-                        @Override
-                        public void onComplete(HistoryRecord record) {
-                            // [v] 서버 저장이 완전히 끝나서 ID가 담긴 record가 도착하면 실행!
-                            Log.i(TAG, "[분석 및 저장 완료] 가짜 확률: " + fakeProbability + "%");
-
-                            // 4. ResultActivity로 이동
-                            Intent intent = new Intent(MainActivity.this, ResultActivity.class);
-
-                            // 서버에서 받아온 record를 넘깁니다. (이게 있어야 바로 삭제 가능!)
-                            intent.putExtra("record", record);
-                            intent.putExtra("analysis_result", intentResult); // 가벼운 객체 전달
-
-                            if (currentImageUri != null) {
-                                intent.putExtra("original_image_uri", currentImageUri.toString());
-                            }
-
-                            // 이제 모든 준비가 끝났으니 화면 전환!
-                            startActivity(intent);
-                        }
-                    });
-                }
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "분석 실패: " + e.getMessage());
-            Toast.makeText(this, "분석 중 오류가 발생했습니다.", Toast.LENGTH_SHORT).show();
+        if (currentImageUri != null) {
+            intent.putExtra("original_image_uri", currentImageUri.toString());
         }
+
+        startActivity(intent);
     }
 
     private void processGalleryImage(Uri uri) {
@@ -369,74 +313,18 @@ public class MainActivity extends AppCompatActivity {
     private void processImageUrl(String url) {
         Toast.makeText(this, "이미지 로딩 중...", Toast.LENGTH_SHORT).show();
 
-        Glide.with(this)
-                .asBitmap()
-                .load(url)
-                .into(new CustomTarget<Bitmap>() {
-                    @Override
-                    public void onResourceReady(@NonNull Bitmap bitmap, @Nullable Transition<? super Bitmap> transition) {
-                        // 이미지 로드 성공
-                        currentBitmap = bitmap;
-                        currentImageUri = null;  // URL에서 가져온 것이므로 URI는 null
+        Intent intent = new Intent(MainActivity.this, LoadingActivity.class);
+        intent.putExtra("image_url", url); // URL 문자열 전달 (매우 가벼움)
+        intent.putExtra("is_from_url", true); // URL 모드임을 표시
 
-                        // 화면 업데이트
-                        stopCamera();
-                        viewFinder.setVisibility(View.GONE);
-                        galleryImageView.setVisibility(View.VISIBLE);
-                        galleryImageView.setImageBitmap(bitmap);
-
-                        Toast.makeText(MainActivity.this, "이미지 로드 완료, 분석 시작", Toast.LENGTH_SHORT).show();
-
-                        // ✅ 체크리스트: 로드된 비트맵으로 바로 분석 실행!
-                        runDeepfakeAnalysisWithVisualization();
-                    }
-
-                    @Override
-                    public void onLoadFailed(@Nullable Drawable errorDrawable) {
-                        // ✅ 체크리스트: 접근 권한 없거나 깨진 링크일 경우 토스트 메시지
-                        Toast.makeText(MainActivity.this,
-                                "이미지를 불러올 수 없습니다. URL을 확인해주세요.",
-                                Toast.LENGTH_SHORT).show();
-                    }
-
-                    @Override
-                    public void onLoadCleared(@Nullable Drawable placeholder) {
-                        // 필수 오버라이드 (비워둠)
-                    }
-                });
+        startActivity(intent);
     }
     //영상 URL 처리 (서버로 전송)
     private void processVideoUrl(String url) {
-        Toast.makeText(this, "영상 분석 중... 시간이 걸릴 수 있습니다", Toast.LENGTH_LONG).show();
-
-        // Retrofit 인스턴스 생성
-        Retrofit retrofit = getRetrofitInstance();
-        PostService service = retrofit.create(PostService.class);
-
-        // 요청 생성
-        VideoAnalysisRequest request = new VideoAnalysisRequest(url);
-
-        // 서버 호출
-        service.analyzeVideo(request).enqueue(new Callback<VideoAnalysisResponse>() {
-            @Override
-            public void onResponse(Call<VideoAnalysisResponse> call, Response<VideoAnalysisResponse> response) {
-                if (response.isSuccessful() && response.body() != null) {
-                    handleVideoAnalysisResult(response.body());
-                } else {
-                    Toast.makeText(MainActivity.this,
-                            "서버 오류가 발생했습니다",
-                            Toast.LENGTH_SHORT).show();
-                }
-            }
-
-            @Override
-            public void onFailure(Call<VideoAnalysisResponse> call, Throwable t) {
-                Toast.makeText(MainActivity.this,
-                        "네트워크 오류: " + t.getMessage(),
-                        Toast.LENGTH_SHORT).show();
-                Log.e(TAG, "서버 통신 실패", t);
-            }
-        });
+        Intent intent = new Intent(MainActivity.this, LoadingActivity.class);
+        intent.putExtra("video_url", url);
+        intent.putExtra("is_video_mode", true); // 영상 분석 모드임을 표시
+        startActivity(intent);
     }
     //Retrofit 인스턴스 생성
     private Retrofit getRetrofitInstance() {
@@ -460,6 +348,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     //서버에서 받은 영상 분석 결과 처리
+    // 서버에서 받은 영상 분석 결과 처리
     private void handleVideoAnalysisResult(VideoAnalysisResponse response) {
         try {
             // 1. Base64 이미지를 Bitmap으로 변환
@@ -478,32 +367,43 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
 
-            // 3. HeatmapProcessor로 히트맵 비트맵 생성
+            // 3. HeatmapProcessor로 히트맵 비트맵 생성 (ResultActivity 공유용)
             HeatmapProcessor heatmapProcessor = new HeatmapProcessor();
             Bitmap heatmapBitmap = heatmapProcessor.createHeatmapImage(heatmapMatrix);
+            BitmapHolder.heatmapBitmap = heatmapBitmap;
 
             // 4. 확률값 변환 (0.0~1.0 → 0~100%)
             float fakeProbability = response.getProbability() * 100f;
 
-            // 5. AnalysisResult 객체 생성
-            AnalysisResult result = new AnalysisResult(fakeProbability, heatmapBitmap);
+            // 5. AnalysisResult 객체 생성 (화면 전달용은 비트맵 제외하여 가볍게)
+            AnalysisResult uploadResult = new AnalysisResult(fakeProbability, heatmapBitmap);
+            AnalysisResult intentResult = new AnalysisResult(fakeProbability, null);
 
-            // 6. Firebase에 저장
+            // 6. Firebase에 저장 및 완료 후 이동
             FirebaseManager firebaseManager = new FirebaseManager();
-            firebaseManager.uploadAnalysisResult(result, frameBitmap);
 
-            // 7. ResultActivity로 이동
-            Intent intent = new Intent(MainActivity.this, ResultActivity.class);
-            intent.putExtra("analysis_result", result);
-            // ✅ 영상의 대표 프레임을 byte array로 전달
-            ByteArrayOutputStream stream = new ByteArrayOutputStream();
-            frameBitmap.compress(Bitmap.CompressFormat.JPEG, 50, stream);
-            byte[] byteArray = stream.toByteArray();
-            intent.putExtra("original_image_bytes", byteArray);
+            // ✅ 콜백 인터페이스를 사용하여 업로드 완료 후 실행
+            firebaseManager.uploadAnalysisResult(uploadResult, frameBitmap, new FirebaseManager.OnUploadCompleteListener() {
+                @Override
+                public void onComplete(HistoryRecord record) {
+                    // 7. ResultActivity로 이동
+                    Intent intent = new Intent(MainActivity.this, LoadingActivity.class);
 
-            startActivity(intent);
+                    // 생성된 DB 레코드 정보 전달
+                    intent.putExtra("record", record);
+                    intent.putExtra("analysis_result", intentResult);
 
-            Toast.makeText(this, "분석 완료!", Toast.LENGTH_SHORT).show();
+                    intent.putExtra("is_already_analyzed", true);
+
+                    // 영상의 대표 프레임을 byte array로 전달
+                    ByteArrayOutputStream stream = new ByteArrayOutputStream();
+                    frameBitmap.compress(Bitmap.CompressFormat.JPEG, 50, stream);
+                    byte[] byteArray = stream.toByteArray();
+                    intent.putExtra("original_image_bytes", byteArray);
+
+                    startActivity(intent);
+                }
+            });
 
         } catch (Exception e) {
             Toast.makeText(this, "결과 처리 중 오류 발생: " + e.getMessage(), Toast.LENGTH_SHORT).show();

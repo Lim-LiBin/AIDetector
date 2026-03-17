@@ -18,7 +18,6 @@ import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
-import com.capstone.aidetector.model.HistoryRecord;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -56,6 +55,17 @@ public class HistoryAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
     public void setItems(List<HistoryRecord> list) {
         this.items = list;
         notifyDataSetChanged();
+    }
+
+    public void removeItem(String documentId) {
+        for (int i = 0; i < items.size(); i++) {
+            if (items.get(i).getDocumentId().equals(documentId)) {
+                items.remove(i);
+                notifyItemRemoved(i); // 애니메이션과 함께 삭제
+                notifyItemRangeChanged(i, items.size());
+                break;
+            }
+        }
     }
 
     public void setGalleryMode(boolean isGallery) {
@@ -180,7 +190,7 @@ public class HistoryAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
     }
 
     private String dateStr(HistoryRecord item) {
-        return item.getTimestamp() != null ? sdf.format(item.getTimestamp().toDate()) : "날짜 없음";
+        return item.getTimestamp() != null ? sdf.format(item.getTimestamp()) : "날짜 없음";
     }
 
     private void toggleSelection(String documentId) {

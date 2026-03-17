@@ -1,6 +1,5 @@
-package com.capstone.aidetector.model;
+package com.capstone.aidetector;
 
-import com.google.firebase.Timestamp;
 import java.util.Date;
 import java.io.Serializable;
 

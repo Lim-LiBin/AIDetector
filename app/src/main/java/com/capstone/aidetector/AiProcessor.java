@@ -3,7 +3,6 @@ package com.capstone.aidetector;
 import android.content.Context;
 import android.content.res.AssetFileDescriptor;
 import android.graphics.Bitmap;
-import android.os.SystemClock;
 import android.util.Log;
 
 import org.tensorflow.lite.DataType;
@@ -26,23 +25,28 @@ public class AiProcessor {
     private NnApiDelegate nnApiDelegate;
     private static final String MODEL_PATH = "model.tflite";
 
+    // [v3 모델 구조 반영]
+    // 코랩 분석 결과에 따라 인덱스가 바뀔 수 있으니 로그를 꼭 확인하세요.
+    private static final int OUTPUT_INDEX_HEATMAP = 0; // 4D 텐서 [1, 7, 7, 1280]가 0번임
+    private static final int OUTPUT_INDEX_SCORE = 1;   // 2D 텐서 [1, 1]가 1번임
+
     public AiProcessor(Context context) {
         try {
-            // [v] NnApiDelegate를 연동하여 가속 설정
+            Interpreter.Options options = new Interpreter.Options();
+            options.setNumThreads(4); // CPU 가속 설정
+
+            /* GPU 가속(NNAPI)이 필요한 경우 아래 주석 해제
             NnApiDelegate.Options nnApiOptions = new NnApiDelegate.Options();
             nnApiDelegate = new NnApiDelegate(nnApiOptions);
-
-            Interpreter.Options options = new Interpreter.Options();
             options.addDelegate(nnApiDelegate);
-            options.setNumThreads(4);
+            */
 
-            // [v] 모델 로드 및 초기화
             MappedByteBuffer modelBuffer = loadModelFile(context, MODEL_PATH);
             interpreter = new Interpreter(modelBuffer, options);
 
-            Log.d(TAG, "[모델 로드 완료] Interpreter 및 NNAPI 설정 성공");
+            Log.d(TAG, "모델 로드 성공: " + MODEL_PATH);
         } catch (Exception e) {
-            Log.e(TAG, "모델 로드 실패: " + e.getMessage());
+            Log.e(TAG, "모델 초기화 실패: " + e.getMessage());
         }
     }
 
@@ -54,66 +58,62 @@ public class AiProcessor {
     }
 
     /**
-     * 다중 출력 추론 실행
-     * 결과: score(확률값), heatmap(7x7 행렬)
-     */
-    public Map<String, Object> runInference(TensorImage tensorImage) {
-        if (interpreter == null || tensorImage == null) return null;
-
-        // 1. 출력 버퍼 준비
-        float[][] probability = new float[1][1];
-        float[][][][] heatmapMatrix = new float[1][7][7][1280]; // 1280개 채널!
-
-        Object[] inputs = { tensorImage.getBuffer() };
-        Map<Integer, Object> outputs = new HashMap<>();
-
-        outputs.put(0, heatmapMatrix); // 모델에 따라 인덱스가 다를 수 있으니 확인 필수!
-        outputs.put(1, probability);
-
-        try {
-            interpreter.runForMultipleInputsOutputs(inputs, outputs);
-
-            float finalScore = probability[0][0];
-
-            // 2. 히트맵 가공: 1280개 채널의 평균값 구하기
-            float[][] finalHeatmap = new float[7][7];
-            for (int i = 0; i < 7; i++) {
-                for (int j = 0; j < 7; j++) {
-                    float sum = 0;
-                    for (int c = 0; c < 1280; c++) {
-                        sum += heatmapMatrix[0][i][j][c]; // 모든 채널을 다 더함
-                    }
-                    finalHeatmap[i][j] = sum / 1280f; // 평균값 저장
-                }
-            }
-
-            //HeatmapProcessor heatmapProcessor = new HeatmapProcessor();
-            //Bitmap heatmapBitmap = heatmapProcessor.createHeatmapImage(finalHeatmap);
-
-            Map<String, Object> resultMap = new HashMap<>();
-            resultMap.put("score", finalScore);
-            resultMap.put("heatmap", finalHeatmap);
-            return resultMap;
-
-        } catch (Exception e) {
-            Log.e(TAG, "추론 오류: " + e.getMessage());
-            return null;
-        }
-    }
-
-    /**
-     * 이미지 전처리 (가장 중요한 부분)
+     * [핵심 수정] 파이썬 ImageDataGenerator(rescale=1./255)와 동일하게 세팅
      */
     public TensorImage processImage(Bitmap bitmap) {
         ImageProcessor imageProcessor = new ImageProcessor.Builder()
                 .add(new ResizeOp(224, 224, ResizeOp.ResizeMethod.BILINEAR))
-                // 0.0 ~ 1.0 범위로 학습 코드와 일치시킴
+                // NormalizeOp(mean, std): (pixel - mean) / std
+                // (pixel - 0.0f) / 255.0f -> 0~1 범위로 정규화
                 .add(new NormalizeOp(0.0f, 255.0f))
                 .build();
 
         TensorImage tensorImage = new TensorImage(DataType.FLOAT32);
         tensorImage.load(bitmap);
         return imageProcessor.process(tensorImage);
+    }
+
+    public Map<String, Object> runInference(TensorImage tensorImage) {
+        if (interpreter == null || tensorImage == null) return null;
+
+        // 출력 버퍼 할당 (v3 모델 형태)
+        float[][] scoreBuffer = new float[1][1];
+        float[][][][] heatmapBuffer = new float[1][7][7][1280];
+
+        Object[] inputs = { tensorImage.getBuffer() };
+        Map<Integer, Object> outputs = new HashMap<>();
+        outputs.put(OUTPUT_INDEX_SCORE, scoreBuffer);
+        outputs.put(OUTPUT_INDEX_HEATMAP, heatmapBuffer);
+
+        try {
+            interpreter.runForMultipleInputsOutputs(inputs, outputs);
+
+            float rawScore = scoreBuffer[0][0];
+
+            // [히트맵 가공] 파이썬 분석 코드와 동일하게 채널 평균(Mean) 방식 적용
+            float[][] processedHeatmap = new float[7][7];
+            for (int i = 0; i < 7; i++) {
+                for (int j = 0; j < 7; j++) {
+                    float sum = 0;
+                    for (int c = 0; c < 1280; c++) {
+                        sum += heatmapBuffer[0][i][j][c];
+                    }
+                    // 1280개 채널의 평균값을 계산
+                    processedHeatmap[i][j] = sum / 1280.0f;
+                }
+            }
+
+            Map<String, Object> resultMap = new HashMap<>();
+            resultMap.put("score", rawScore);     // 0~1 사이의 확률값
+            resultMap.put("heatmap", processedHeatmap); // 7x7 데이터
+
+            Log.d(TAG, "추론 성공 - Score: " + rawScore);
+            return resultMap;
+
+        } catch (Exception e) {
+            Log.e(TAG, "추론 중 오류 발생: " + e.getMessage());
+            return null;
+        }
     }
 
     public void close() {

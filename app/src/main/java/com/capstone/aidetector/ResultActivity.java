@@ -26,7 +26,6 @@ import android.graphics.Bitmap;  // ← 추가!
 import android.graphics.BitmapFactory;  // ← 추가!
 
 import com.bumptech.glide.Glide;
-import com.capstone.aidetector.model.HistoryRecord;
 
 public class ResultActivity extends AppCompatActivity {
 
@@ -91,57 +90,64 @@ public class ResultActivity extends AppCompatActivity {
 
     private void receiveAndSetData() {
         Intent intent = getIntent();
-        if (intent != null) {
-            // 1. 원본 이미지 (Glide 사용)
-            if (intent.hasExtra("original_image_uri")) {
-                String uriString = intent.getStringExtra("original_image_uri");
-                Glide.with(this).load(Uri.parse(uriString)).into(ivOriginalImage);
-                Uri imageUri = Uri.parse(uriString);
-                ivOriginalImage.setImageURI(imageUri);
-            }else if (intent.hasExtra("original_image_bytes")) {
-                // URL에서 가져온 경우 (byte array로 전달)
+        if (intent == null) return;
+
+        boolean fromHistory = intent.getBooleanExtra("from_history", false);
+
+        if (fromHistory) {
+            // --- 이력에서 온 경우 (기존 코드 유지) ---
+            currentRecord = (HistoryRecord) intent.getSerializableExtra("record");
+            if (currentRecord != null) {
+                updateUIByResult(currentRecord.getResult(), currentRecord.getProbability());
+                Glide.with(this).load(currentRecord.getOriginalUrl()).into(ivOriginalImage);
+                Glide.with(this).load(currentRecord.getHeatmapUrl()).into(ivHeatmapImage);
+            }
+        } else {
+            // --- 방금 막 분석을 완료하고 로딩 화면을 거쳐 넘어온 경우 ---
+
+            // 1. 원본 이미지 표시 (바이트 배열 우선 확인)
+            if (intent.hasExtra("original_image_bytes")) {
                 byte[] byteArray = intent.getByteArrayExtra("original_image_bytes");
                 if (byteArray != null) {
                     Bitmap bitmap = BitmapFactory.decodeByteArray(byteArray, 0, byteArray.length);
                     ivOriginalImage.setImageBitmap(bitmap);
                 }
+            } else if (intent.hasExtra("original_image_uri")) {
+                String uriString = intent.getStringExtra("original_image_uri");
+                Glide.with(this).load(Uri.parse(uriString)).into(ivOriginalImage);
             }
 
-            // 2. 판별 결과 및 확률 세팅 (슬라이더 잠금 로직 포함)
-            if (intent.hasExtra("analysis_result")) {
-                AnalysisResult result = intent.getParcelableExtra("analysis_result");
-                if (result != null) {
+            // 2. 히트맵 및 결과 텍스트 표시
+            AnalysisResult result = intent.getParcelableExtra("analysis_result");
+            if (result != null) {
+                updateUIByResult(result.probability >= 50.0f ? "Fake" : "Real", result.probability);
 
-                    // [v] 비트맵은 Holder에서 안전하게 가져오기 (튕김 방지)
-                    if (BitmapHolder.heatmapBitmap != null) {
-                        ivHeatmapImage.setImageBitmap(BitmapHolder.heatmapBitmap);
-                    }
-
-                    float probability = result.probability;
-                    pbResultGauge.setProgress((int) probability);
-
-                    // 50% 이상이면 Fake(네온 핑크), 미만이면 Real(네온 시안)
-                    if (probability >= 50.0f) {
-                        tvResultText.setText(String.format("판별 결과 : 거짓 (%.1f%%)", probability));
-                        tvResultText.setTextColor(Color.parseColor("#FF5E62"));
-                        pbResultGauge.setProgressTintList(ColorStateList.valueOf(Color.parseColor("#FF5E62")));
-
-                        // [추가] 가짜면 히트맵을 보여주고 슬라이더 활성화
-                        ivHeatmapImage.setVisibility(View.VISIBLE);
-                        sbOpacitySlider.setEnabled(true);
-                    } else {
-                        tvResultText.setText(String.format("판별 결과 : 참 (%.1f%%)", probability));
-                        tvResultText.setTextColor(Color.parseColor("#00D2FF"));
-                        pbResultGauge.setProgressTintList(ColorStateList.valueOf(Color.parseColor("#00D2FF")));
-
-                        // [추가] 진짜면 히트맵을 숨기고 슬라이더 비활성화(잠금)
-                        ivHeatmapImage.setVisibility(View.INVISIBLE);
-                        sbOpacitySlider.setEnabled(false);
-                        sbOpacitySlider.setProgress(0); // 슬라이더 동그라미를 맨 왼쪽으로 초기화
-                    }
+                // 로딩 액티비티에서 보관소에 넣어둔 히트맵 비트맵을 꺼내서 표시
+                if (BitmapHolder.heatmapBitmap != null) {
+                    ivHeatmapImage.setImageBitmap(BitmapHolder.heatmapBitmap);
                 }
             }
         }
+    }
+
+    private void updateUIByResult(String result, float probability) {
+        boolean isFake = "Fake".equalsIgnoreCase(result) || probability >= 50.0f;
+
+        if (isFake) {
+            tvResultText.setText(String.format("판별 결과 : 거짓 (%.1f%%)", probability));
+            tvResultText.setTextColor(Color.parseColor("#FF5E62")); // 네온 핑크
+            pbResultGauge.setProgressTintList(ColorStateList.valueOf(Color.parseColor("#FF5E62")));
+            ivHeatmapImage.setVisibility(View.VISIBLE);
+            sbOpacitySlider.setEnabled(true);
+        } else {
+            tvResultText.setText(String.format("판별 결과 : 참 (%.1f%%)", probability));
+            tvResultText.setTextColor(Color.parseColor("#00D2FF")); // 네온 시안
+            pbResultGauge.setProgressTintList(ColorStateList.valueOf(Color.parseColor("#00D2FF")));
+            ivHeatmapImage.setVisibility(View.INVISIBLE);
+            sbOpacitySlider.setEnabled(false);
+            sbOpacitySlider.setProgress(0);
+        }
+        pbResultGauge.setProgress((int) probability);
     }
 
     private void setupSlider() {

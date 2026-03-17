@@ -16,10 +16,9 @@ import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.capstone.aidetector.model.HistoryRecord;
-
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 public class HistoryActivity extends AppCompatActivity {
 
@@ -46,6 +45,14 @@ public class HistoryActivity extends AppCompatActivity {
         layoutNormalBottom = findViewById(R.id.layoutNormalBottom);
         btnDeleteMode = findViewById(R.id.btnDeleteMode);
         btnCancelMode = findViewById(R.id.btnCancelMode);
+
+        firebaseManager = new FirebaseManager();
+
+        if (firebaseManager == null) {
+            firebaseManager = new FirebaseManager();
+        }
+
+        loadData();
 
         setupRecyclerView();
         checkEmptyState();
@@ -90,11 +97,45 @@ public class HistoryActivity extends AppCompatActivity {
         }
     }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // ⭐️ 중요: setupRecyclerView가 onCreate에서 먼저 실행되었는지 확인하세요.
+        // 어댑터가 생성된 후에 데이터를 불러와야 안전합니다.
+        if (adapter != null) {
+            fetchData();
+        }
+    }
+
+    private void loadData() {
+        // FirebaseManager의 loadHistory 호출
+        firebaseManager.loadHistory(new FirebaseManager.OnHistoryLoadedListener() {
+            @Override
+            public void onSuccess(List<HistoryRecord> list) {
+                // 받아온 리스트를 어댑터에 갱신
+                historyList = list;
+                adapter.setItems(historyList);
+
+                // 데이터 유무에 따른 빈 화면 처리
+                if (historyList.isEmpty()) {
+                    tvEmpty.setVisibility(View.VISIBLE);
+                    recyclerView.setVisibility(View.GONE);
+                } else {
+                    tvEmpty.setVisibility(View.GONE);
+                    recyclerView.setVisibility(View.VISIBLE);
+                }
+            }
+        });
+    }
+
     private void setupRecyclerView() {
         adapter = new HistoryAdapter(this, new HistoryAdapter.OnItemClickListener() {
             @Override
             public void onShortClick(HistoryRecord record) {
                 Intent intent = new Intent(HistoryActivity.this, ResultActivity.class);
+
+                intent.putExtra("from_history", true);
+                intent.putExtra("record", record);
 
                 // ResultActivity가 이력에서 왔다는 걸 알 수 있게 꼬리표 달기 및 데이터 전송
                 intent.putExtra("from_history", true);
@@ -172,15 +213,63 @@ public class HistoryActivity extends AppCompatActivity {
         new AlertDialog.Builder(this)
                 .setTitle("삭제하시겠습니까?")
                 .setPositiveButton("네", (dialog, which) -> {
+                    Set<String> selectedIds = adapter.getSelectedDocIds();
+                    if (selectedIds.isEmpty()) return;
 
-                    // 💬 Firebase DB 및 Storage 삭제 로직 추가 (adapter.getSelectedDocIds() 활용)
+                    int totalToDelete = selectedIds.size();
+                    final int[] deletedCount = {0};
 
-                    Toast.makeText(this, "검사 기록이 삭제되었습니다.", Toast.LENGTH_SHORT).show();
+                    // 원본 리스트 복사본으로 반복문 돌리기 (안전성 확보)
+                    List<HistoryRecord> copyList = new ArrayList<>(historyList);
+
+                    for (HistoryRecord record : copyList) {
+                        if (selectedIds.contains(record.getDocumentId())) {
+                            firebaseManager.deleteHistory(record, () -> {
+                                deletedCount[0]++;
+                                // ⭐️ 선택한 모든 항목이 Firebase에서 지워졌을 때만 새로고침
+                                if (deletedCount[0] == totalToDelete) {
+                                    runOnUiThread(() -> {
+                                        fetchData();
+                                        Toast.makeText(HistoryActivity.this, "삭제 완료되었습니다.", Toast.LENGTH_SHORT).show();
+                                    });
+                                }
+                            });
+                        }
+                    }
                     exitSelectionMode();
                 })
-                .setNegativeButton("아니요", (dialog, which) -> {
-                    dialog.dismiss();
-                })
+                .setNegativeButton("아니요", (dialog, which) -> dialog.dismiss())
                 .show();
+    }
+
+    // 데이터 새로고침 함수
+    public void fetchData() {
+        if (firebaseManager == null) {
+            firebaseManager = new FirebaseManager();
+        }
+
+        firebaseManager.loadHistory(new FirebaseManager.OnHistoryLoadedListener() {
+            @Override
+            public void onSuccess(List<HistoryRecord> list) {
+                // 1. 데이터 리스트 업데이트
+                historyList = (list != null) ? list : new ArrayList<>();
+
+                // 2. UI 업데이트 (Main Thread 보장 및 Null 체크)
+                runOnUiThread(() -> {
+                    if (adapter != null) {
+                        adapter.setItems(historyList);
+                    }
+
+                    // 3. 빈 화면 처리 (tvEmptyMessage 대신 tvEmpty 사용)
+                    if (historyList.isEmpty()) {
+                        if (tvEmpty != null) tvEmpty.setVisibility(View.VISIBLE);
+                        if (recyclerView != null) recyclerView.setVisibility(View.GONE);
+                    } else {
+                        if (tvEmpty != null) tvEmpty.setVisibility(View.GONE);
+                        if (recyclerView != null) recyclerView.setVisibility(View.VISIBLE);
+                    }
+                });
+            }
+        });
     }
 }

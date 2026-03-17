@@ -5,91 +5,253 @@ import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.content.Intent;
 import android.content.res.ColorStateList;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
+import android.graphics.drawable.Drawable;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.util.Base64;
+import android.util.Log;
 import android.view.View;
 import android.widget.TextView;
+import android.widget.Toast;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.bumptech.glide.Glide;
+import com.bumptech.glide.request.target.CustomTarget;
+import com.bumptech.glide.request.transition.Transition;
+import com.capstone.aidetector.HistoryRecord;
+
+import org.tensorflow.lite.support.image.TensorImage;
+
+import java.util.List;
+import java.util.Map;
+
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
+import retrofit2.Retrofit;
+import retrofit2.converter.gson.GsonConverterFactory;
+
 public class LoadingActivity extends AppCompatActivity {
+
+    private static final String TAG = "LoadingActivity";
+    private HistoryRecord savedRecord;
+    private AnalysisResult savedResult;
+    private boolean isAnimationFinished = false;
+
+    private TextView tvStepText;
+    private View step1, step2, step3;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_loading);
 
-        TextView tvStepText = findViewById(R.id.tv_step_text);
+        // 1. 뷰 초기화
+        tvStepText = findViewById(R.id.tv_step_text);
+        step1 = findViewById(R.id.step1);
+        step2 = findViewById(R.id.step2);
+        step3 = findViewById(R.id.step3);
 
-        View step1 = findViewById(R.id.step1);
-        View step2 = findViewById(R.id.step2);
-        View step3 = findViewById(R.id.step3);
+        // 2. 인텐트 플래그 확인
+        boolean isVideoMode = getIntent().getBooleanExtra("is_video_mode", false);
+        boolean isFromUrl = getIntent().getBooleanExtra("is_from_url", false);
+        boolean isAlreadyAnalyzed = getIntent().getBooleanExtra("is_already_analyzed", false);
 
-        // 0에서 100까지 3초(3000ms) 동안 진행하면서 단계 변화를 시뮬레이션
+        startLoadingAnimation();
+
+        // 3. 모드별 로직 실행
+        if (isAlreadyAnalyzed) {
+            // Case 1: 이미 MainActivity에서 분석/저장이 끝난 경우 (단순 로딩 대기)
+            savedRecord = (HistoryRecord) getIntent().getSerializableExtra("record");
+            savedResult = (AnalysisResult) getIntent().getParcelableExtra("analysis_result");
+        } else if (isVideoMode) {
+            // Case 2: 영상 URL 분석 (서버 통신 필요)
+            performVideoAnalysis(getIntent().getStringExtra("video_url"));
+        } else if (isFromUrl) {
+            // Case 3: 이미지 URL 분석 (다운로드 후 AI 분석)
+            loadAndAnalyzeUrlImage(getIntent().getStringExtra("image_url"));
+        } else {
+            // Case 4: 일반 이미지 (갤러리/카메라 비트맵 분석)
+            byte[] bytes = getIntent().getByteArrayExtra("original_image_bytes");
+            if (bytes != null) {
+                Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+                new Thread(() -> performAnalysis(bitmap)).start();
+            }
+        }
+    }
+
+    // [서버] 영상 분석 요청
+    private void performVideoAnalysis(String url) {
+        Retrofit retrofit = new Retrofit.Builder()
+                .baseUrl(ServerConfig.getBaseUrl())
+                .addConverterFactory(GsonConverterFactory.create())
+                .build();
+
+        PostService service = retrofit.create(PostService.class);
+        service.analyzeVideo(new VideoAnalysisRequest(url)).enqueue(new Callback<VideoAnalysisResponse>() {
+            @Override
+            public void onResponse(Call<VideoAnalysisResponse> call, Response<VideoAnalysisResponse> response) {
+                if (response.isSuccessful() && response.body() != null) {
+                    processVideoServerResult(response.body());
+                } else { finishWithError("서버 응답 실패"); }
+            }
+            @Override
+            public void onFailure(Call<VideoAnalysisResponse> call, Throwable t) { finishWithError("네트워크 실패"); }
+        });
+    }
+
+    // [서버] 영상 분석 결과 처리 (히트맵 생성 및 DB 저장)
+    private void processVideoServerResult(VideoAnalysisResponse res) {
+        new Thread(() -> {
+            try {
+                byte[] bytes = Base64.decode(res.getFrameBase64(), Base64.DEFAULT);
+                Bitmap frameBitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+
+                List<List<Float>> heatmapList = res.getHeatmap();
+                int rows = heatmapList.size();
+                int cols = heatmapList.get(0).size();
+                float[][] heatmapMatrix = new float[rows][cols];
+
+                for (int i = 0; i < rows; i++) {
+                    for (int j = 0; j < cols; j++) {
+                        heatmapMatrix[i][j] = heatmapList.get(i).get(j);
+                    }
+                }
+
+                HeatmapProcessor heatmapProcessor = new HeatmapProcessor();
+                Bitmap heatmapBitmap = heatmapProcessor.createHeatmapImage(heatmapMatrix);
+                BitmapHolder.heatmapBitmap = heatmapBitmap;
+
+                float prob = res.getProbability() * 100f;
+                savedResult = new AnalysisResult(prob, null);
+                AnalysisResult uploadResult = new AnalysisResult(prob, heatmapBitmap);
+
+                new FirebaseManager().uploadAnalysisResult(uploadResult, frameBitmap, record -> {
+                    savedRecord = record;
+                    checkDataAndMove();
+                });
+            } catch (Exception e) {
+                Log.e(TAG, "영상 결과 처리 오류", e);
+                finishWithError("결과 처리 중 오류 발생");
+            }
+        }).start();
+    }
+
+    // [AI] 이미지 분석 로직 (로컬 TFLite)
+    private void performAnalysis(Bitmap bitmap) {
+        try {
+            AiProcessor aiProcessor = new AiProcessor(this);
+            TensorImage processedImage = aiProcessor.processImage(bitmap);
+            Map<String, Object> results = aiProcessor.runInference(processedImage);
+
+            float score = (float) results.get("score");
+            float[][] heatmapMatrix = (float[][]) results.get("heatmap");
+
+            HeatmapProcessor heatmapProcessor = new HeatmapProcessor();
+            Bitmap heatmapBitmap = heatmapProcessor.createHeatmapImage(heatmapMatrix);
+            BitmapHolder.heatmapBitmap = heatmapBitmap;
+
+            float prob = score * 100f;
+            savedResult = new AnalysisResult(prob, null);
+
+            new FirebaseManager().uploadAnalysisResult(new AnalysisResult(prob, heatmapBitmap), bitmap, record -> {
+                savedRecord = record;
+                checkDataAndMove();
+            });
+        } catch (Exception e) { Log.e(TAG, "분석 오류", e); }
+    }
+
+    private void loadAndAnalyzeUrlImage(String url) {
+        Glide.with(this).asBitmap().load(url).into(new CustomTarget<Bitmap>() {
+            @Override
+            public void onResourceReady(@NonNull Bitmap res, @Nullable Transition<? super Bitmap> t) {
+                new Thread(() -> performAnalysis(res)).start();
+            }
+            @Override
+            public void onLoadFailed(@Nullable Drawable d) { finishWithError("이미지 로드 실패"); }
+            @Override
+            public void onLoadCleared(@Nullable Drawable p) {}
+        });
+    }
+
+    // --- 애니메이션 및 화면 전환 로직 ---
+
+    private void startLoadingAnimation() {
         ValueAnimator animator = ValueAnimator.ofInt(0, 100);
         animator.setDuration(3000);
-        animator.addUpdateListener(animation -> {
-            int progress = (int) animation.getAnimatedValue();
-
-            // 구간별로 동그라미 색상과 텍스트 변경
-            if (progress < 33) {
-                // 1단계: 첫 번째 빨간불 ON, 나머지 OFF
-                step1.setBackgroundResource(R.drawable.step_active);
-                step1.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#FF5E62"))); // 네온 핑크(빨강)
-
-                step2.setBackgroundResource(R.drawable.step_inactive);
-                step2.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#333333"))); // 꺼짐(다크 그레이)
-
-                step3.setBackgroundResource(R.drawable.step_inactive);
-                step3.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#333333"))); // 꺼짐
-
-                tvStepText.setText("사진을 읽고 있음...");
-
-            } else if (progress < 66) {
-                // 2단계: 두 번째 노란불 ON, 나머지 OFF
-                step1.setBackgroundResource(R.drawable.step_inactive);
-                step1.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#333333"))); // 꺼짐
-
-                step2.setBackgroundResource(R.drawable.step_active);
-                step2.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#FFEA00"))); // 네온 옐로우
-
-                step3.setBackgroundResource(R.drawable.step_inactive);
-                step3.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#333333"))); // 꺼짐
-
-                tvStepText.setText("AI가 판별 중...");
-
-            } else {
-                // 3단계: 세 번째 초록불 ON, 나머지 OFF
-                step1.setBackgroundResource(R.drawable.step_inactive);
-                step1.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#333333"))); // 꺼짐
-
-                step2.setBackgroundResource(R.drawable.step_inactive);
-                step2.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#333333"))); // 꺼짐
-
-                step3.setBackgroundResource(R.drawable.step_active);
-                step3.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#00FF7F"))); // 네온 그린
-
-                tvStepText.setText("결과 화면 준비 중...");
-            }
-        });
-
-        // 100이 되면 결과 화면으로 데이터 넘기고 이동!
+        animator.addUpdateListener(animation -> updateLoadingUI((int) animation.getAnimatedValue()));
         animator.addListener(new AnimatorListenerAdapter() {
             @Override
-            public void onAnimationEnd(Animator animation) {
-                Intent currentIntent = getIntent();
-                Intent nextIntent = new Intent(LoadingActivity.this, ResultActivity.class);
-
-                // 받은 데이터를 그대로 ResultActivity로 전달
-                if (currentIntent != null && currentIntent.getExtras() != null) {
-                    nextIntent.putExtras(currentIntent.getExtras());
-                }
-                startActivity(nextIntent);
-                finish();
+            public void onAnimationEnd(Animator a) {
+                isAnimationFinished = true;
+                checkDataAndMove();
             }
         });
-
-        // 애니메이션 시작
         animator.start();
+    }
+
+    private void updateLoadingUI(int progress) {
+        if (progress < 33) {
+            setStepColors("#FF5E62", "#333333", "#333333");
+            tvStepText.setText("데이터 읽는 중...");
+        } else if (progress < 66) {
+            setStepColors("#333333", "#FFEA00", "#333333");
+            tvStepText.setText("AI 분석 중...");
+        } else {
+            setStepColors("#333333", "#333333", "#00FF7F");
+            tvStepText.setText("결과 준비 중...");
+        }
+    }
+
+    private void setStepColors(String c1, String c2, String c3) {
+        step1.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor(c1)));
+        step2.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor(c2)));
+        step3.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor(c3)));
+    }
+
+    // LoadingActivity.java 의 checkDataAndMove 메서드 부분만 바꿔도 됩니다.
+    private void checkDataAndMove() {
+        // 애니메이션이 끝났고(isAnimationFinished), DB 저장(savedRecord)도 완료되었다면
+        if (isAnimationFinished && savedRecord != null) {
+            new Handler(Looper.getMainLooper()).post(() -> {
+                Intent nextIntent = new Intent(LoadingActivity.this, ResultActivity.class);
+
+                // 1. 분석 결과 정보 전달
+                nextIntent.putExtra("record", savedRecord);
+                nextIntent.putExtra("analysis_result", savedResult);
+
+                // ⭐️ [가장 중요] MainActivity에서 받은 원본 바이트 배열을 "다시" 꺼내서 전달!
+                // 이걸 안 하면 ResultActivity에서 사진을 그릴 재료가 없어요.
+                byte[] originalBytes = getIntent().getByteArrayExtra("original_image_bytes");
+                if (originalBytes != null) {
+                    nextIntent.putExtra("original_image_bytes", originalBytes);
+                }
+
+                // ⭐️ URL 분석인 경우 주소도 다시 전달
+                String originalUri = getIntent().getStringExtra("original_image_uri");
+                if (originalUri != null) {
+                    nextIntent.putExtra("original_image_uri", originalUri);
+                }
+
+                startActivity(nextIntent);
+                finish();
+                // 부드러운 화면 전환
+                overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
+            });
+        }
+    }
+
+    private void finishWithError(String msg) {
+        runOnUiThread(() -> {
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
+            finish();
+        });
     }
 }
