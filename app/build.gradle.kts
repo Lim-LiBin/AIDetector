@@ -61,4 +61,14 @@ dependencies {
     implementation("com.github.bumptech.glide:glide:4.16.0")
     annotationProcessor("com.github.bumptech.glide:compiler:4.16.0")
 
+    // Retrofit (서버 통신)
+    implementation("com.squareup.retrofit2:retrofit:2.9.0")
+    implementation("com.squareup.retrofit2:converter-gson:2.9.0")
+
+    // OkHttp (로깅)
+    implementation("com.squareup.okhttp3:logging-interceptor:4.11.0")
+
+    // Glide (이미지 로드)
+    //implementation("com.github.bumptech.glide:glide:4.15.1")
+    //annotationProcessor("com.github.bumptech.glide:compiler:4.15.1")
 }
