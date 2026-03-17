@@ -1,21 +1,23 @@
 package com.capstone.aidetector.model;
 
 import com.google.firebase.Timestamp;
+import java.util.Date;
+import java.io.Serializable;
 
-public class HistoryRecord {
+public class HistoryRecord implements Serializable {
     private String documentId; // Firestore 문서 고유 ID (삭제 시 필요)
     private String uid;        // 사용자 식별자 (일단 "test_user_01"로)
     private String result;     // "Real" 또는 "Fake"
     private float probability; // 판별 확률 수치
     private String originalUrl; // 원본 이미지 Storage 주소
     private String heatmapUrl;  // 히트맵 이미지 Storage 주소
-    private Timestamp timestamp; // 서버 저장 시간 (정렬 기준)
+    private Date timestamp; // 서버 저장 시간 (정렬 기준)
 
     // 빈 생성자 (Firestore가 데이터를 자동으로 변환할 때 필요)
     public HistoryRecord() {}
 
     // 전체 생성자
-    public HistoryRecord(String uid, String result, float probability, String originalUrl, String heatmapUrl, Timestamp timestamp) {
+    public HistoryRecord(String uid, String result, float probability, String originalUrl, String heatmapUrl, Date timestamp) {
         this.uid = uid;
         this.result = result;
         this.probability = probability;
@@ -37,7 +39,7 @@ public class HistoryRecord {
     public void setOriginalUrl(String url) { this.originalUrl = url; }
     public String getHeatmapUrl() { return heatmapUrl; }
     public void setHeatmapUrl(String url) { this.heatmapUrl = url; }
-    public Timestamp getTimestamp() { return timestamp; }
-    public void setTimestamp(Timestamp timestamp) { this.timestamp = timestamp; }
+    public java.util.Date getTimestamp() { return timestamp; }
+    public void setTimestamp(java.util.Date timestamp) { this.timestamp = timestamp; }
 
 }

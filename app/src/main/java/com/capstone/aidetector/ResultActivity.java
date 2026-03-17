@@ -1,6 +1,5 @@
 package com.capstone.aidetector;
 
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
@@ -10,6 +9,7 @@ import android.os.Bundle;
 import android.text.SpannableString;
 import android.text.style.ForegroundColorSpan;
 import android.text.style.StyleSpan;
+import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
@@ -22,6 +22,11 @@ import android.widget.Toast;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
+import android.graphics.Bitmap;  // ← 추가!
+import android.graphics.BitmapFactory;  // ← 추가!
+
+import com.bumptech.glide.Glide;
+import com.capstone.aidetector.model.HistoryRecord;
 
 public class ResultActivity extends AppCompatActivity {
 
@@ -30,6 +35,8 @@ public class ResultActivity extends AppCompatActivity {
     private ImageView ivOriginalImage;
     private ImageView ivHeatmapImage;
     private SeekBar sbOpacitySlider;
+    private FirebaseManager firebaseManager = new FirebaseManager();
+    private HistoryRecord currentRecord;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -40,6 +47,13 @@ public class ResultActivity extends AppCompatActivity {
         setupToolbar();
         receiveAndSetData();
         setupSlider();
+
+        currentRecord = (HistoryRecord) getIntent().getSerializableExtra("record");
+
+        if (currentRecord == null) {
+            Log.d("ResultActivity", "방금 분석한 결과입니다. (이력 데이터 없음)");
+            return;
+        }
     }
 
     private void initViews() {
@@ -78,19 +92,30 @@ public class ResultActivity extends AppCompatActivity {
     private void receiveAndSetData() {
         Intent intent = getIntent();
         if (intent != null) {
-
-            // 1. 원본 이미지 세팅
+            // 1. 원본 이미지 (Glide 사용)
             if (intent.hasExtra("original_image_uri")) {
                 String uriString = intent.getStringExtra("original_image_uri");
+                Glide.with(this).load(Uri.parse(uriString)).into(ivOriginalImage);
                 Uri imageUri = Uri.parse(uriString);
                 ivOriginalImage.setImageURI(imageUri);
+            }else if (intent.hasExtra("original_image_bytes")) {
+                // URL에서 가져온 경우 (byte array로 전달)
+                byte[] byteArray = intent.getByteArrayExtra("original_image_bytes");
+                if (byteArray != null) {
+                    Bitmap bitmap = BitmapFactory.decodeByteArray(byteArray, 0, byteArray.length);
+                    ivOriginalImage.setImageBitmap(bitmap);
+                }
             }
 
-            // 2. 판별 결과 및 확률 세팅
+            // 2. 판별 결과 및 확률 세팅 (슬라이더 잠금 로직 포함)
             if (intent.hasExtra("analysis_result")) {
                 AnalysisResult result = intent.getParcelableExtra("analysis_result");
                 if (result != null) {
-                    ivHeatmapImage.setImageBitmap(result.heatmapBitmap);
+
+                    // [v] 비트맵은 Holder에서 안전하게 가져오기 (튕김 방지)
+                    if (BitmapHolder.heatmapBitmap != null) {
+                        ivHeatmapImage.setImageBitmap(BitmapHolder.heatmapBitmap);
+                    }
 
                     float probability = result.probability;
                     pbResultGauge.setProgress((int) probability);
@@ -132,15 +157,29 @@ public class ResultActivity extends AppCompatActivity {
             public void onStopTrackingTouch(SeekBar seekBar) {}
         });
     }
-
     private void showDeleteConfirmDialog() {
+        if (currentRecord == null) {
+            Toast.makeText(this, "이력(History) 화면에서 들어와야 삭제가 가능합니다.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
         new AlertDialog.Builder(this)
                 .setMessage("이 기록을 삭제하시겠습니까?")
                 .setPositiveButton("네", (dialog, which) -> {
-                    Toast.makeText(ResultActivity.this, "삭제되었습니다.", Toast.LENGTH_SHORT).show();
-                    // 추후 Firebase 삭제 로직 추가 위치
+                    firebaseManager.deleteHistory(currentRecord, () -> {
+                        // 삭제가 성공적으로 끝난 후 실행될 코드
+                        Toast.makeText(ResultActivity.this, "기록이 삭제되었습니다.", Toast.LENGTH_SHORT).show();
+
+                        // 삭제되었으니 결과 화면을 닫고 이전 화면(이력 리스트)으로 돌아갑니다.
+                        finish();
+                    });
                 })
                 .setNegativeButton("아니요", (dialog, which) -> dialog.dismiss())
                 .show();
+    }
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        BitmapHolder.heatmapBitmap = null;
     }
 }

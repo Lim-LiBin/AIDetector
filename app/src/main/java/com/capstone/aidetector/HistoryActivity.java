@@ -30,8 +30,10 @@ public class HistoryActivity extends AppCompatActivity {
     private Button btnDeleteMode;
     private ImageButton btnCancelMode; // 뒤로가기(취소) 아이콘
 
-    private HistoryAdapter adapter;
     private List<HistoryRecord> historyList = new ArrayList<>();
+    private HistoryAdapter adapter;
+    private FirebaseManager firebaseManager;
+    private TextView tvEmptyMessage;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
