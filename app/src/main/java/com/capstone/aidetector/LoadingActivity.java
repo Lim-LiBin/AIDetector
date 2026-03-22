@@ -25,7 +25,6 @@ import androidx.appcompat.app.AppCompatActivity;
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.request.target.CustomTarget;
 import com.bumptech.glide.request.transition.Transition;
-import com.capstone.aidetector.HistoryRecord;
 
 import org.tensorflow.lite.support.image.TensorImage;
 
@@ -63,6 +62,7 @@ public class LoadingActivity extends AppCompatActivity {
         boolean isVideoMode = getIntent().getBooleanExtra("is_video_mode", false);
         boolean isFromUrl = getIntent().getBooleanExtra("is_from_url", false);
         boolean isAlreadyAnalyzed = getIntent().getBooleanExtra("is_already_analyzed", false);
+        boolean isLocalImage = getIntent().getBooleanExtra("is_local_image", false);
 
         startLoadingAnimation();
 
@@ -77,12 +77,12 @@ public class LoadingActivity extends AppCompatActivity {
         } else if (isFromUrl) {
             // Case 3: 이미지 URL 분석 (다운로드 후 AI 분석)
             loadAndAnalyzeUrlImage(getIntent().getStringExtra("image_url"));
-        } else {
-            // Case 4: 일반 이미지 (갤러리/카메라 비트맵 분석)
-            byte[] bytes = getIntent().getByteArrayExtra("original_image_bytes");
-            if (bytes != null) {
-                Bitmap bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
-                new Thread(() -> performAnalysis(bitmap)).start();
+        } else if (isLocalImage) {
+            // Case 4: 일반 이미지 (갤러리/카메라 비트맵 분석) - BitmapHolder에서 꺼내서 씁니다.
+            if (BitmapHolder.originalBitmap != null) {
+                new Thread(() -> performAnalysis(BitmapHolder.originalBitmap)).start();
+            } else {
+                finishWithError("이미지 데이터를 찾을 수 없습니다.");
             }
         }
     }
@@ -113,6 +113,9 @@ public class LoadingActivity extends AppCompatActivity {
             try {
                 byte[] bytes = Base64.decode(res.getFrameBase64(), Base64.DEFAULT);
                 Bitmap frameBitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+
+                // 원본 영상 프레임을 보관소에 저장
+                BitmapHolder.originalBitmap = frameBitmap;
 
                 List<List<Float>> heatmapList = res.getHeatmap();
                 int rows = heatmapList.size();
@@ -147,6 +150,9 @@ public class LoadingActivity extends AppCompatActivity {
     // [AI] 이미지 분석 로직 (로컬 TFLite)
     private void performAnalysis(Bitmap bitmap) {
         try {
+            // 원본 이미지를 보관소에 저장
+            BitmapHolder.originalBitmap = bitmap;
+
             AiProcessor aiProcessor = new AiProcessor(this);
             TensorImage processedImage = aiProcessor.processImage(bitmap);
             Map<String, Object> results = aiProcessor.runInference(processedImage);
@@ -172,6 +178,7 @@ public class LoadingActivity extends AppCompatActivity {
         Glide.with(this).asBitmap().load(url).into(new CustomTarget<Bitmap>() {
             @Override
             public void onResourceReady(@NonNull Bitmap res, @Nullable Transition<? super Bitmap> t) {
+                BitmapHolder.originalBitmap = res;
                 new Thread(() -> performAnalysis(res)).start();
             }
             @Override
@@ -216,7 +223,6 @@ public class LoadingActivity extends AppCompatActivity {
         step3.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor(c3)));
     }
 
-    // LoadingActivity.java 의 checkDataAndMove 메서드 부분만 바꿔도 됩니다.
     private void checkDataAndMove() {
         // 애니메이션이 끝났고(isAnimationFinished), DB 저장(savedRecord)도 완료되었다면
         if (isAnimationFinished && savedRecord != null) {
@@ -227,14 +233,10 @@ public class LoadingActivity extends AppCompatActivity {
                 nextIntent.putExtra("record", savedRecord);
                 nextIntent.putExtra("analysis_result", savedResult);
 
-                // ⭐️ [가장 중요] MainActivity에서 받은 원본 바이트 배열을 "다시" 꺼내서 전달!
-                // 이걸 안 하면 ResultActivity에서 사진을 그릴 재료가 없어요.
-                byte[] originalBytes = getIntent().getByteArrayExtra("original_image_bytes");
-                if (originalBytes != null) {
-                    nextIntent.putExtra("original_image_bytes", originalBytes);
-                }
+                // ⭐️ [수정된 부분] 앱을 튕기게 만들었던 무거운 byte[] 전달 코드를 완전히 삭제했습니다!
+                // ResultActivity에서는 이제 안전하게 BitmapHolder를 통해 이미지를 띄웁니다.
 
-                // ⭐️ URL 분석인 경우 주소도 다시 전달
+                // URL 분석인 경우 주소만 텍스트(String)로 전달 (가벼움)
                 String originalUri = getIntent().getStringExtra("original_image_uri");
                 if (originalUri != null) {
                     nextIntent.putExtra("original_image_uri", originalUri);

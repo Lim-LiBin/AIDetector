@@ -22,8 +22,8 @@ import android.widget.Toast;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
-import android.graphics.Bitmap;  // ← 추가!
-import android.graphics.BitmapFactory;  // ← 추가!
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 
 import com.bumptech.glide.Glide;
 
@@ -67,7 +67,7 @@ public class ResultActivity extends AppCompatActivity {
         Toolbar toolbar = findViewById(R.id.toolbar);
         toolbar.inflateMenu(R.menu.menu_result); // 만들어둔 메뉴 파일 연결
 
-        // [수정된 부분] 툴바 안에서 직접 메뉴 아이템을 찾아 글씨 속성 변경
+        // 툴바 안에서 직접 메뉴 아이템을 찾아 글씨 속성 변경
         Menu menu = toolbar.getMenu();
         MenuItem deleteItem = menu.findItem(R.id.action_delete);
         if (deleteItem != null) {
@@ -105,16 +105,9 @@ public class ResultActivity extends AppCompatActivity {
         } else {
             // --- 방금 막 분석을 완료하고 로딩 화면을 거쳐 넘어온 경우 ---
 
-            // 1. 원본 이미지 표시 (바이트 배열 우선 확인)
-            if (intent.hasExtra("original_image_bytes")) {
-                byte[] byteArray = intent.getByteArrayExtra("original_image_bytes");
-                if (byteArray != null) {
-                    Bitmap bitmap = BitmapFactory.decodeByteArray(byteArray, 0, byteArray.length);
-                    ivOriginalImage.setImageBitmap(bitmap);
-                }
-            } else if (intent.hasExtra("original_image_uri")) {
-                String uriString = intent.getStringExtra("original_image_uri");
-                Glide.with(this).load(Uri.parse(uriString)).into(ivOriginalImage);
+            // 1. 보관소에서 원본 이미지 꺼내서 표시 (기존 byte/uri 방식 대체)
+            if (BitmapHolder.originalBitmap != null) {
+                ivOriginalImage.setImageBitmap(BitmapHolder.originalBitmap);
             }
 
             // 2. 히트맵 및 결과 텍스트 표시
@@ -163,6 +156,7 @@ public class ResultActivity extends AppCompatActivity {
             public void onStopTrackingTouch(SeekBar seekBar) {}
         });
     }
+
     private void showDeleteConfirmDialog() {
         if (currentRecord == null) {
             Toast.makeText(this, "이력(History) 화면에서 들어와야 삭제가 가능합니다.", Toast.LENGTH_SHORT).show();
@@ -183,9 +177,12 @@ public class ResultActivity extends AppCompatActivity {
                 .setNegativeButton("아니요", (dialog, which) -> dialog.dismiss())
                 .show();
     }
+
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        // 메모리 누수를 막기 위해 액티비티가 종료될 때 둘 다 비워줍니다.
         BitmapHolder.heatmapBitmap = null;
+        BitmapHolder.originalBitmap = null;
     }
 }

@@ -10,4 +10,5 @@ import android.graphics.Bitmap;
 public class BitmapHolder {
     // 히트맵 이미지를 임시로 담아둘 정적 변수
     public static Bitmap heatmapBitmap = null;
+    public static Bitmap originalBitmap = null;
 }
