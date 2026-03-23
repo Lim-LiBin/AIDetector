@@ -19,27 +19,34 @@ import java.util.regex.Pattern;
 
 public class SignupActivity extends AppCompatActivity {
 
+    // UI 컴포넌트 선언
     private EditText nameInput, emailInput, pwInput, pwConfirmInput, phoneInput;
     private Button checkBtn, signupBtn;
     private ImageButton backBtn;
     private CheckBox termsCheckbox;
     private TextInputLayout pwLayout, pwConfirmLayout;
 
+    // 이메일(아이디) 중복 확인 통과 여부 상태값
     private boolean isIdChecked = false;
 
-    // 최소 8자 이상, 영문 1개 이상, 숫자 1개 이상 포함 (특수문자 허용)
+    // 유효성 검사용 정규식 (Regex)
+    // 비밀번호: 최소 8자 이상, 영문 1개 이상, 숫자 1개 이상 포함 (특수문자 허용)
     private static final String PW_PATTERN = "^(?=.*[A-Za-z])(?=.*\\d).{8,}$";
+    // 전화번호: 010-XXXX-XXXX 형식 강제
+    private static final String PHONE_PATTERN = "^010-\\d{4}-\\d{4}$";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_signup);
 
-        initViews();
-        setupListeners();
-        updateButtonAppearance(); // 처음에 화면을 켰을 때 회색으로 시작하게 세팅
+        initViews();       // 뷰 초기화 및 바인딩
+        setupListeners();  // 이벤트 리스너 등록
+        updateButtonAppearance(); // 초기 화면 진입 시 가입 버튼 비활성화 상태(회색) 처리
     }
 
+
+     // XML 레이아웃의 뷰 요소를 Java 객체와 연결(Binding)
     private void initViews() {
         backBtn = findViewById(R.id.back_btn);
         nameInput = findViewById(R.id.name_input);
@@ -54,8 +61,10 @@ public class SignupActivity extends AppCompatActivity {
         termsCheckbox = findViewById(R.id.terms_checkbox);
     }
 
+
+     // 버튼 클릭 및 텍스트 입력 변화 등의 이벤트 리스너 설정
     private void setupListeners() {
-        // 1. 뒤로가기 버튼
+        // [뒤로가기 버튼] 클릭 시 로그인 화면으로 이동
         backBtn.setOnClickListener(v -> {
             Intent intent = new Intent(SignupActivity.this, LoginActivity.class);
             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
@@ -63,7 +72,7 @@ public class SignupActivity extends AppCompatActivity {
             finish();
         });
 
-        // 2. ID 중복 확인
+        // [중복 확인 버튼] 이메일 입력값 검증 및 중복확인 처리
         checkBtn.setOnClickListener(v -> {
             String email = emailInput.getText().toString().trim();
             if (email.isEmpty()) {
@@ -77,47 +86,49 @@ public class SignupActivity extends AppCompatActivity {
                 emailInput.setError(null);
                 Toast.makeText(this, "사용 가능한 아이디입니다.", Toast.LENGTH_SHORT).show();
                 pwInput.requestFocus();
-                updateButtonAppearance(); // 중복확인 완료 시 버튼 색상 업데이트
+                updateButtonAppearance(); // 조건 갱신에 따른 하단 버튼 상태 업데이트
             }
         });
 
-        // 3. 사용자가 글자를 입력할 때마다 검사 및 경고 지우기
+        // [텍스트 감지 리스너] 실시간 입력값 검증 및 에러 메시지 초기화
         TextWatcher inputWatcher = new TextWatcher() {
             @Override
             public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
 
             @Override
             public void onTextChanged(CharSequence s, int start, int before, int count) {
+                // 입력 중인 필드의 기존 에러 상태 해제
                 if (nameInput.getText().hashCode() == s.hashCode()) {
                     nameInput.setError(null);
                 } else if (emailInput.getText().hashCode() == s.hashCode()) {
-                    isIdChecked = false;
+                    isIdChecked = false; // 이메일이 수정되면 중복확인 상태 초기화
                     emailInput.setError(null);
                 } else if (phoneInput.getText().hashCode() == s.hashCode()) {
                     phoneInput.setError(null);
                 }
 
-                checkPasswordRealTime();
-                updateButtonAppearance(); // 글자를 칠 때마다 모든 조건이 맞았는지 확인해서 색상 변경
+                checkPasswordRealTime();  // 비밀번호 실시간 유효성 검사 실행
+                updateButtonAppearance(); // 조건 충족 여부에 따른 가입 버튼 UI 갱신
             }
 
             @Override
             public void afterTextChanged(Editable s) {}
         };
 
+        // 모든 입력 필드에 TextWatcher 부착
         nameInput.addTextChangedListener(inputWatcher);
         emailInput.addTextChangedListener(inputWatcher);
         pwInput.addTextChangedListener(inputWatcher);
         pwConfirmInput.addTextChangedListener(inputWatcher);
         phoneInput.addTextChangedListener(inputWatcher);
 
-        // 4. 바깥쪽 약관 체크박스 클릭 시 (팝업 띄우기)
+        // [약관 동의 체크박스] 클릭 시 팝업(Dialog) 호출
         termsCheckbox.setOnClickListener(v -> {
-            termsCheckbox.setChecked(false);
+            termsCheckbox.setChecked(false); // 임의 체크 방지 (팝업에서 동의해야만 체크됨)
             showTermsDialog();
         });
 
-        // 5. 회원가입 버튼 클릭 시 유효성 검사 + 빨간 에러 메시지 띄우기
+        // [회원가입 버튼] 최종 유효성 검사 및 가입 처리
         signupBtn.setOnClickListener(v -> {
             String name = nameInput.getText().toString().trim();
             String email = emailInput.getText().toString().trim();
@@ -125,48 +136,52 @@ public class SignupActivity extends AppCompatActivity {
             String pwConfirm = pwConfirmInput.getText().toString().trim();
             String phone = phoneInput.getText().toString().trim();
 
+            // 1. 이름 빈칸 검사
             if (name.isEmpty()) {
                 nameInput.setError("이름을 입력해주세요.");
                 nameInput.requestFocus();
                 return;
             }
-
+            // 2. 이메일(아이디) 빈칸 검사
             if (email.isEmpty()) {
                 emailInput.setError("아이디(이메일)를 입력해주세요.");
                 emailInput.requestFocus();
                 return;
             }
+            // 3. 중복확인 통과 여부 검사
             if (!isIdChecked) {
                 emailInput.setError("중복확인을 진행해주세요.");
                 emailInput.requestFocus();
                 return;
             }
-
+            // 4. 비밀번호 정규식 검사
             if (!Pattern.matches(PW_PATTERN, pw)) {
                 pwLayout.setError("비밀번호 형식을 확인해주세요.");
                 pwInput.requestFocus();
                 return;
             }
-
+            // 5. 비밀번호 확인 일치 검사
             if (!pw.equals(pwConfirm)) {
                 pwConfirmLayout.setError("비밀번호가 일치하지 않습니다.");
                 pwConfirmInput.requestFocus();
                 return;
             }
-
-            if (phone.isEmpty()) {
-                phoneInput.setError("전화번호를 입력해주세요.");
+            // 6. 전화번호 정규식 검사
+            if (!Pattern.matches(PHONE_PATTERN, phone)) {
+                phoneInput.setError("010-0000-0000 형식으로 입력해주세요.");
                 phoneInput.requestFocus();
                 return;
             }
-
+            // 7. 약관 동의 검사
             if (!termsCheckbox.isChecked()) {
                 Toast.makeText(this, "필수 이용약관에 동의해주세요.", Toast.LENGTH_SHORT).show();
                 return;
             }
 
-            // 모든 관문을 통과했다면 회원가입 완료 처리!
+            // 모든 검증 통과 시 회원가입 로직 처리
             Toast.makeText(SignupActivity.this, "가입이 완료되었습니다.", Toast.LENGTH_LONG).show();
+
+            // 회원가입 성공 시 로그인 화면으로 전환
             Intent intent = new Intent(SignupActivity.this, LoginActivity.class);
             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
             startActivity(intent);
@@ -174,7 +189,8 @@ public class SignupActivity extends AppCompatActivity {
         });
     }
 
-    // 조건 충족 여부에 따라 버튼 '색상'만 눈속임으로 변경하는 메서드
+
+     // 회원가입 조건 충족 여부를 실시간으로 판별하여 가입 버튼의 활성/비활성 디자인을 변경
     private void updateButtonAppearance() {
         String name = nameInput.getText().toString().trim();
         String email = emailInput.getText().toString().trim();
@@ -184,28 +200,30 @@ public class SignupActivity extends AppCompatActivity {
 
         boolean isPwValid = Pattern.matches(PW_PATTERN, pw);
         boolean isPwMatch = pw.equals(pwConfirm) && !pw.isEmpty();
+        boolean isPhoneValid = Pattern.matches(PHONE_PATTERN, phone);
 
-        // 모든 조건이 맞는지 확인
+        // 모든 필수 조건이 충족되었는지 검증
         boolean allValid = !name.isEmpty()
                 && !email.isEmpty()
                 && isIdChecked
                 && isPwValid
                 && isPwMatch
-                && !phone.isEmpty()
+                && isPhoneValid
                 && termsCheckbox.isChecked();
 
         if (allValid) {
-            // 모든 조건 충족 시: 원래의 연보라색 켜짐 상태
+            // 조건 충족 시: 네온 시안색 켜짐 상태 (활성화 시각화)
             signupBtn.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#00D2FF")));
             signupBtn.setTextColor(Color.parseColor("#000000"));
         } else {
-            // 조건 미충족 시: 회색으로 칠해서 비활성화된 것처럼 보이기
+            // 조건 미충족 시: 회색 톤으로 비활성화 처리
             signupBtn.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#FFFFFF")));
             signupBtn.setTextColor(Color.parseColor("#AAAAAA"));
         }
     }
 
-    // 비밀번호 실시간 검사 로직
+
+     // 비밀번호 및 비밀번호 확인 필드의 입력값을 실시간으로 검사하여 에러 메시지(빨간 줄)를 제어
     private void checkPasswordRealTime() {
         String pw = pwInput.getText().toString().trim();
         String pwConfirm = pwConfirmInput.getText().toString().trim();
@@ -213,6 +231,7 @@ public class SignupActivity extends AppCompatActivity {
         boolean isPwValid = Pattern.matches(PW_PATTERN, pw);
         boolean isPwMatch = pw.equals(pwConfirm);
 
+        // 비밀번호 정규식 오류 처리
         if (pw.isEmpty()) {
             pwLayout.setError(null);
         } else if (!isPwValid) {
@@ -221,6 +240,7 @@ public class SignupActivity extends AppCompatActivity {
             pwLayout.setError(null);
         }
 
+        // 비밀번호 확인 일치 오류 처리
         if (pwConfirm.isEmpty()) {
             pwConfirmLayout.setError(null);
         } else if (!isPwMatch) {
@@ -230,26 +250,30 @@ public class SignupActivity extends AppCompatActivity {
         }
     }
 
-    // 이용 약관 팝업 로직
+
+     // 이용약관 동의를 위한 커스텀 다이얼로그(팝업)를 화면에 출력
     private void showTermsDialog() {
         Dialog dialog = new Dialog(this);
         dialog.setContentView(R.layout.dialog_terms);
-        dialog.setCancelable(false);
+        dialog.setCancelable(false); // 바깥 여백 터치로 닫히는 것 방지
 
         CheckBox dialogTermsCheckbox = dialog.findViewById(R.id.dialog_terms_checkbox);
         Button btnClose = dialog.findViewById(R.id.btn_close);
         Button btnConfirm = dialog.findViewById(R.id.btn_confirm);
 
+        // 팝업 내 약관 확인 체크 시에만 '동의 완료' 버튼 활성화
         dialogTermsCheckbox.setOnCheckedChangeListener((buttonView, isChecked) -> {
             btnConfirm.setEnabled(isChecked);
         });
 
+        // 닫기 버튼: 동의 없이 팝업 종료
         btnClose.setOnClickListener(v -> dialog.dismiss());
 
+        // 동의 완료 버튼: 팝업 종료 후 부모 화면의 체크박스 활성화 및 버튼 상태 업데이트
         btnConfirm.setOnClickListener(v -> {
             dialog.dismiss();
             termsCheckbox.setChecked(true);
-            updateButtonAppearance(); // 약관 동의 후에도 버튼 색상 업데이트
+            updateButtonAppearance();
         });
 
         dialog.show();
