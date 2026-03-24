@@ -106,7 +106,11 @@ public class LoadingActivity extends AppCompatActivity {
             try {
                 byte[] bytes = Base64.decode(res.getFrameBase64(), Base64.DEFAULT);
                 Bitmap frameBitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
-                
+
+                // 원본 크기 저장
+                int originalWidth = frameBitmap.getWidth();
+                int originalHeight = frameBitmap.getHeight();
+
                 // 영상 분석의 경우 서버에서 받은 프레임을 홀더에 저장
                 BitmapHolder.originalBitmap = frameBitmap;
 
@@ -125,7 +129,12 @@ public class LoadingActivity extends AppCompatActivity {
                 }
 
                 HeatmapProcessor heatmapProcessor = new HeatmapProcessor();
-                Bitmap heatmapBitmap = heatmapProcessor.createHeatmapImage(heatmapMatrix);
+                // 원본 크기에 맞춰 히트맵 생성
+                Bitmap heatmapBitmap = heatmapProcessor.createHeatmapImage(
+                        heatmapMatrix,
+                        originalWidth,
+                        originalHeight
+                );
                 BitmapHolder.heatmapBitmap = heatmapBitmap;
 
                 float prob = res.getProbability() * 100f;
@@ -150,6 +159,10 @@ public class LoadingActivity extends AppCompatActivity {
         }
 
         try {
+            // 원본 크기 저장
+            int originalWidth = bitmap.getWidth();
+            int originalHeight = bitmap.getHeight();
+
             // 메모리 부족 방지를 위해 리사이징
             Bitmap scaledBitmap = scaleBitmapIfNeeded(bitmap);
             // ⭐️ 분석에 쓰인 최적화된 이미지를 다시 홀더에 넣어 다음 화면에서 쓰게 함
@@ -163,7 +176,12 @@ public class LoadingActivity extends AppCompatActivity {
             float[][] heatmapMatrix = (float[][]) results.get("heatmap");
 
             HeatmapProcessor heatmapProcessor = new HeatmapProcessor();
-            Bitmap heatmapBitmap = heatmapProcessor.createHeatmapImage(heatmapMatrix);
+            // 원본 크기에 맞춰 히트맵 생성
+            Bitmap heatmapBitmap = heatmapProcessor.createHeatmapImage(
+                    heatmapMatrix,
+                    originalWidth,
+                    originalHeight
+            );
             BitmapHolder.heatmapBitmap = heatmapBitmap;
 
             float prob = score * 100f;

@@ -30,4 +30,19 @@ public class HeatmapProcessor {
 
         return finalBitmap;
     }
+
+    public Bitmap createHeatmapImage(float[][] heatmap, int targetWidth, int targetHeight) {
+        // 1. 먼저 224x224 히트맵 생성
+        Bitmap heatmap224 = createHeatmapImage(heatmap);
+
+        // 2. 원본 크기로 리사이즈
+        Bitmap resizedHeatmap = Bitmap.createScaledBitmap(
+                heatmap224,
+                targetWidth,
+                targetHeight,
+                true  // 부드러운 필터링
+        );
+
+        return resizedHeatmap;
+    }
 }
