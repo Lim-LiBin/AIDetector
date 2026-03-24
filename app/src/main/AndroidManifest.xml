@@ -50,6 +50,8 @@
             android:name=".HistoryActivity"
             android:exported="false" />
 
+        <activity android:name=".SettingsActivity"
+            android:exported="false" />
 
     </application>
 

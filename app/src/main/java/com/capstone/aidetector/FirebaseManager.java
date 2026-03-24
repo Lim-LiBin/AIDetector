@@ -3,6 +3,7 @@ package com.capstone.aidetector;
 import android.graphics.Bitmap;
 import android.util.Log;
 
+import com.google.firebase.auth.FirebaseAuth; // 추가: 인증 정보 가져오기
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.Query;
@@ -19,13 +20,19 @@ public class FirebaseManager {
     private static final String TAG = "FirebaseManager";
     private final FirebaseStorage storage = FirebaseStorage.getInstance();
     private final FirebaseFirestore db = FirebaseFirestore.getInstance();
+    private final FirebaseAuth auth = FirebaseAuth.getInstance(); // 추가
 
     public interface OnUploadCompleteListener {
         void onComplete(HistoryRecord record);
     }
 
-    // 고정 UID 설정
-    private final String TEST_UID = "test_user_01";
+    //실시간으로 로그인한 사용자의 UID를 가져오는 메서드
+    private String getUid() {
+        if (auth.getCurrentUser() != null) {
+            return auth.getCurrentUser().getUid();
+        }
+        return "unknown_user"; // 예외 방지용 (로그인 안 된 상태)
+    }
 
     public void uploadAnalysisResult(AnalysisResult result, Bitmap originalBitmap, OnUploadCompleteListener listener) {
         if (result == null || result.heatmapBitmap == null || originalBitmap == null) {
@@ -33,42 +40,47 @@ public class FirebaseManager {
             return;
         }
 
+        String uid = getUid(); // 현재 사용자의 UID 획득
         String timestampStr = String.valueOf(System.currentTimeMillis());
 
         ByteArrayOutputStream originalBaos = new ByteArrayOutputStream();
         originalBitmap.compress(Bitmap.CompressFormat.JPEG, 90, originalBaos);
-        StorageReference originalRef = storage.getReference().child("originals/original_" + timestampStr + ".jpg");
+
+        //경로 체계화: originals/{uid}/파일명
+        StorageReference originalRef = storage.getReference()
+                .child("originals/" + uid + "/original_" + timestampStr + ".jpg");
 
         originalRef.putBytes(originalBaos.toByteArray()).addOnSuccessListener(task -> {
             originalRef.getDownloadUrl().addOnSuccessListener(originalUri -> {
-                // [수정] listener를 다음 함수로 전달
                 uploadHeatmap(result, timestampStr, originalUri.toString(), listener);
             });
         }).addOnFailureListener(e -> Log.e(TAG, "원본 업로드 실패: " + e.getMessage()));
     }
 
     private void uploadHeatmap(AnalysisResult result, String timestampStr, String originalUrl, OnUploadCompleteListener listener) {
+        String uid = getUid();
         ByteArrayOutputStream heatmapBaos = new ByteArrayOutputStream();
         result.heatmapBitmap.compress(Bitmap.CompressFormat.JPEG, 90, heatmapBaos);
-        StorageReference heatmapRef = storage.getReference().child("heatmaps/heatmap_" + timestampStr + ".jpg");
+
+        //경로 체계화: heatmaps/{uid}/파일명
+        StorageReference heatmapRef = storage.getReference()
+                .child("heatmaps/" + uid + "/heatmap_" + timestampStr + ".jpg");
 
         heatmapRef.putBytes(heatmapBaos.toByteArray()).addOnSuccessListener(task -> {
             heatmapRef.getDownloadUrl().addOnSuccessListener(heatmapUri -> {
-                // [수정] listener를 최종 저장 함수로 전달
                 saveToFirestore(result.probability, originalUrl, heatmapUri.toString(), listener);
             });
         }).addOnFailureListener(e -> Log.e(TAG, "히트맵 업로드 실패: " + e.getMessage()));
     }
 
     private void saveToFirestore(float probability, String originalUrl, String heatmapUrl, OnUploadCompleteListener listener) {
-        //50% 기준으로 Real/Fake 판별 로직 추가
+        String uid = getUid(); // 실제 UID 사용
         String resultStatus = (probability >= 50.0f) ? "Fake" : "Real";
-
         java.util.Date now = new java.util.Date();
 
         Map<String, Object> data = new HashMap<>();
-        data.put("uid", TEST_UID); // UID 추가
-        data.put("result", resultStatus); // 결과값 추가
+        data.put("uid", uid); // 실제 UID 저장
+        data.put("result", resultStatus);
         data.put("probability", probability);
         data.put("originalUrl", originalUrl);
         data.put("heatmapUrl", heatmapUrl);
@@ -78,10 +90,9 @@ public class FirebaseManager {
                 .addOnSuccessListener(ref -> {
                     Log.d(TAG, "[저장 완료] ID: " + ref.getId());
 
-                    // [핵심!] 방금 저장된 정보를 HistoryRecord 객체로 만들어 MainActivity에 전달
                     HistoryRecord newRecord = new HistoryRecord();
                     newRecord.setDocumentId(ref.getId());
-                    newRecord.setUid(TEST_UID);
+                    newRecord.setUid(uid);
                     newRecord.setResult(resultStatus);
                     newRecord.setProbability(probability);
                     newRecord.setOriginalUrl(originalUrl);
@@ -95,10 +106,11 @@ public class FirebaseManager {
                 .addOnFailureListener(e -> Log.e(TAG, "DB 저장 실패: " + e.getMessage()));
     }
 
-    //최신순 데이터 조회
+    // 최신순 데이터 조회 (실제 UID 기반)
     public void loadHistory(OnHistoryLoadedListener listener) {
+        String uid = getUid();
         db.collection("results")
-                .whereEqualTo("uid", TEST_UID)
+                .whereEqualTo("uid", uid) // 내 데이터만 조회
                 .orderBy("timestamp", Query.Direction.DESCENDING)
                 .get()
                 .addOnSuccessListener(queryDocumentSnapshots -> {
@@ -106,7 +118,7 @@ public class FirebaseManager {
                     for (DocumentSnapshot doc : queryDocumentSnapshots) {
                         HistoryRecord record = doc.toObject(HistoryRecord.class);
                         if (record != null) {
-                            record.setDocumentId(doc.getId()); // 삭제를 위해 문서 ID 저장
+                            record.setDocumentId(doc.getId());
                             historyList.add(record);
                         }
                     }
@@ -114,11 +126,10 @@ public class FirebaseManager {
                 });
     }
 
-    //DB 문서 + Storage 이미지 동시 삭제
+    // DB 문서 + Storage 이미지 동시 삭제
     public void deleteHistory(HistoryRecord record, Runnable onSuccess) {
         if (record == null) return;
 
-        // 원본 삭제 시도 -> 히트맵 삭제 시도 -> DB 삭제 순서 (완료 콜백 사용)
         storage.getReferenceFromUrl(record.getOriginalUrl()).delete().addOnCompleteListener(t1 -> {
             storage.getReferenceFromUrl(record.getHeatmapUrl()).delete().addOnCompleteListener(t2 -> {
                 db.collection("results").document(record.getDocumentId()).delete()
@@ -127,7 +138,6 @@ public class FirebaseManager {
         });
     }
 
-    // 인터페이스 정의
     public interface OnHistoryLoadedListener {
         void onSuccess(List<HistoryRecord> list);
     }
