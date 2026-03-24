@@ -11,6 +11,7 @@ import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.Toast;
@@ -18,6 +19,7 @@ import android.widget.Toast;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.camera.core.CameraSelector;
 import androidx.camera.core.ImageCapture;
@@ -31,36 +33,17 @@ import androidx.core.content.ContextCompat;
 
 import com.google.common.util.concurrent.ListenableFuture;
 
-import java.io.InputStream;
+import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.List;
-import java.util.concurrent.TimeUnit;
-
-// Retrofit
-import retrofit2.Retrofit;
-import retrofit2.converter.gson.GsonConverterFactory;
-import okhttp3.OkHttpClient;
-import okhttp3.logging.HttpLoggingInterceptor;
-import retrofit2.Call;
-import retrofit2.Callback;
-import retrofit2.Response;
-
-// 다이얼로그
-import androidx.appcompat.app.AlertDialog;
-import android.widget.EditText;
-
-// Base64
-import android.util.Base64;
 
 public class MainActivity extends AppCompatActivity {
 
     private PreviewView viewFinder;
     private ImageView galleryImageView;
     private Button btnCapture;
-    private ImageButton btnSelect; // 왼쪽 갤러리 버튼
+    private ImageButton btnSelect;
     private ImageCapture imageCapture;
-
-    private Button btnUrl; //URL 버튼
+    private Button btnUrl;
 
     private static final String TAG = "AiDetector_Main";
     private static final int REQUEST_CODE_PERMISSIONS = 10;
@@ -76,7 +59,6 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        // [TFLite 모델 로드 및 최적화 완료]
         aiProcessor = new AiProcessor(this);
 
         viewFinder = findViewById(R.id.viewFinder);
@@ -90,12 +72,9 @@ public class MainActivity extends AppCompatActivity {
                 uri -> { if (uri != null) processGalleryImage(uri); }
         );
 
-        // 왼쪽 카메라 아이콘: 갤러리 실행
         btnSelect.setOnClickListener(v -> galleryLauncher.launch("image/*"));
-
         btnUrl.setOnClickListener(v -> showUrlInputDialog());
 
-        // 중앙 큰 버튼: 촬영 시작 또는 검사 수행
         btnCapture.setOnClickListener(v -> {
             String mode = btnCapture.getText().toString();
             if (mode.contains("사진")) {
@@ -108,35 +87,25 @@ public class MainActivity extends AppCompatActivity {
                 if (currentBitmap == null) {
                     Toast.makeText(this, "분석할 사진을 선택해주세요!", Toast.LENGTH_SHORT).show();
                 } else {
-                    // [시각화 & DB 연동 로직 실행]
                     runDeepfakeAnalysisWithVisualization();
                 }
             }
         });
 
-        // 하단 '이력' 탭 클릭 시 HistoryActivity로 이동
-        View tabHistory = findViewById(R.id.nav_history);
-        tabHistory.setOnClickListener(v -> {
+        findViewById(R.id.nav_history).setOnClickListener(v -> {
             Intent intent = new Intent(MainActivity.this, HistoryActivity.class);
             startActivity(intent);
         });
     }
 
-    /**
-     * [시각화 & DB 연동]
-     * 추론 결과를 바탕으로 히트맵 이미지를 생성하고 DB 업로드 및 화면 전환을 수행합니다.
-     */
     private void runDeepfakeAnalysisWithVisualization() {
-        Intent intent = new Intent(MainActivity.this, LoadingActivity.class);
-
-        // ⭐️ [수정 핵심] Intent에 무거운 byte 배열을 넣지 않고 보관소(BitmapHolder)를 사용합니다.
+        // ⭐️ [해결] Intent 용량 제한 회피: 대용량 비트맵을 인텐트에 넣지 않고 Holder에 저장
         BitmapHolder.originalBitmap = currentBitmap;
-        intent.putExtra("is_local_image", true); // 로컬 이미지 분석임을 LoadingActivity에 알림
 
+        Intent intent = new Intent(MainActivity.this, LoadingActivity.class);
         if (currentImageUri != null) {
             intent.putExtra("original_image_uri", currentImageUri.toString());
         }
-
         startActivity(intent);
     }
 
@@ -262,142 +231,47 @@ public class MainActivity extends AppCompatActivity {
         if (aiProcessor != null) aiProcessor.close();
     }
 
-    //URL 입력 다이얼로그 표시
     private void showUrlInputDialog() {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setTitle("URL 입력");
-
         final EditText input = new EditText(this);
         input.setHint("URL을 입력해주세요");
         builder.setView(input);
-
         builder.setPositiveButton("확인", (dialog, which) -> {
             String url = input.getText().toString().trim();
-            if (url.isEmpty()) {
-                Toast.makeText(this, "URL을 입력해주세요", Toast.LENGTH_SHORT).show();
-            } else {
-                processUrl(url);
-            }
+            if (url.isEmpty()) Toast.makeText(this, "URL을 입력해주세요", Toast.LENGTH_SHORT).show();
+            else processUrl(url);
         });
-
         builder.setNegativeButton("취소", (dialog, which) -> dialog.cancel());
         builder.show();
     }
 
-    //타입 판별 및 처리
     private void processUrl(String url) {
-        if (isImageUrl(url)) {
-            processImageUrl(url);
-        } else if (isVideoUrl(url)) {
-            processVideoUrl(url);
-        } else {
-            Toast.makeText(this, "지원하지 않는 URL 형식입니다", Toast.LENGTH_SHORT).show();
-        }
+        if (isImageUrl(url)) processImageUrl(url);
+        else if (isVideoUrl(url)) processVideoUrl(url);
+        else Toast.makeText(this, "지원하지 않는 URL 형식입니다", Toast.LENGTH_SHORT).show();
     }
 
-    //이미지 URL 판별
     private boolean isImageUrl(String url) {
         String extPattern = "(?i)\\.(jpg|jpeg|png|gif|bmp|webp)(\\?.*)?$";
-        if (url.matches(".*" + extPattern)) return true;
-
-        String lowerUrl = url.toLowerCase();
-        return lowerUrl.contains("/image") || lowerUrl.contains("/img") ||
-                lowerUrl.contains("image.") || lowerUrl.contains("img.") ||
-                lowerUrl.contains("photo");
+        return url.matches(".*" + extPattern) || url.toLowerCase().contains("/image") || url.toLowerCase().contains("/img");
     }
 
-    //영상 URL 판별 (유튜브 + 일반 영상)
     private boolean isVideoUrl(String url) {
-        if (url.contains("youtube.com/watch") || url.contains("youtu.be/")) return true;
-        String pattern = "(?i)\\.(mp4|avi|mov|wmv|flv|webm)(\\?.*)?$";
-        return url.matches(".*" + pattern);
+        return url.contains("youtube.com/watch") || url.contains("youtu.be/") || url.matches(".*(?i)\\.(mp4|avi|mov|wmv|flv|webm)(\\?.*)?$");
     }
 
-    //이미지 URL 처리 (Glide 사용)
     private void processImageUrl(String url) {
-        Toast.makeText(this, "이미지 로딩 중...", Toast.LENGTH_SHORT).show();
-
         Intent intent = new Intent(MainActivity.this, LoadingActivity.class);
         intent.putExtra("image_url", url);
         intent.putExtra("is_from_url", true);
-
         startActivity(intent);
     }
 
-    //영상 URL 처리 (서버로 전송)
     private void processVideoUrl(String url) {
         Intent intent = new Intent(MainActivity.this, LoadingActivity.class);
         intent.putExtra("video_url", url);
         intent.putExtra("is_video_mode", true);
         startActivity(intent);
-    }
-
-    //Retrofit 인스턴스 생성
-    private Retrofit getRetrofitInstance() {
-        HttpLoggingInterceptor loggingInterceptor = new HttpLoggingInterceptor();
-        loggingInterceptor.setLevel(HttpLoggingInterceptor.Level.BODY);
-
-        OkHttpClient client = new OkHttpClient.Builder()
-                .addInterceptor(loggingInterceptor)
-                .connectTimeout(60, TimeUnit.SECONDS)
-                .readTimeout(60, TimeUnit.SECONDS)
-                .writeTimeout(60, TimeUnit.SECONDS)
-                .build();
-
-        return new Retrofit.Builder()
-                .baseUrl(ServerConfig.getBaseUrl())
-                .client(client)
-                .addConverterFactory(GsonConverterFactory.create())
-                .build();
-    }
-
-    //서버에서 받은 영상 분석 결과 처리
-    private void handleVideoAnalysisResult(VideoAnalysisResponse response) {
-        try {
-            byte[] decodedBytes = Base64.decode(response.getFrameBase64(), Base64.DEFAULT);
-            Bitmap frameBitmap = BitmapFactory.decodeByteArray(decodedBytes, 0, decodedBytes.length);
-
-            List<List<Float>> heatmapList = response.getHeatmap();
-            int rows = heatmapList.size();
-            int cols = heatmapList.get(0).size();
-            float[][] heatmapMatrix = new float[rows][cols];
-
-            for (int i = 0; i < rows; i++) {
-                for (int j = 0; j < cols; j++) {
-                    heatmapMatrix[i][j] = heatmapList.get(i).get(j);
-                }
-            }
-
-            HeatmapProcessor heatmapProcessor = new HeatmapProcessor();
-            Bitmap heatmapBitmap = heatmapProcessor.createHeatmapImage(heatmapMatrix);
-            BitmapHolder.heatmapBitmap = heatmapBitmap;
-
-            float fakeProbability = response.getProbability() * 100f;
-
-            AnalysisResult uploadResult = new AnalysisResult(fakeProbability, heatmapBitmap);
-            AnalysisResult intentResult = new AnalysisResult(fakeProbability, null);
-
-            FirebaseManager firebaseManager = new FirebaseManager();
-
-            firebaseManager.uploadAnalysisResult(uploadResult, frameBitmap, new FirebaseManager.OnUploadCompleteListener() {
-                @Override
-                public void onComplete(HistoryRecord record) {
-                    Intent intent = new Intent(MainActivity.this, LoadingActivity.class);
-
-                    intent.putExtra("record", record);
-                    intent.putExtra("analysis_result", intentResult);
-                    intent.putExtra("is_already_analyzed", true);
-
-                    // ⭐️ [수정 핵심] 영상 프레임도 무거운 byte 배열을 피하고 보관소에 저장합니다.
-                    BitmapHolder.originalBitmap = frameBitmap;
-
-                    startActivity(intent);
-                }
-            });
-
-        } catch (Exception e) {
-            Toast.makeText(this, "결과 처리 중 오류 발생: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-            Log.e(TAG, "결과 처리 오류", e);
-        }
     }
 }

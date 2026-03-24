@@ -52,13 +52,11 @@ public class LoadingActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_loading);
 
-        // 1. 뷰 초기화
         tvStepText = findViewById(R.id.tv_step_text);
         step1 = findViewById(R.id.step1);
         step2 = findViewById(R.id.step2);
         step3 = findViewById(R.id.step3);
 
-        // 2. 인텐트 플래그 확인
         boolean isVideoMode = getIntent().getBooleanExtra("is_video_mode", false);
         boolean isFromUrl = getIntent().getBooleanExtra("is_from_url", false);
         boolean isAlreadyAnalyzed = getIntent().getBooleanExtra("is_already_analyzed", false);
@@ -66,28 +64,24 @@ public class LoadingActivity extends AppCompatActivity {
 
         startLoadingAnimation();
 
-        // 3. 모드별 로직 실행
         if (isAlreadyAnalyzed) {
-            // Case 1: 이미 MainActivity에서 분석/저장이 끝난 경우 (단순 로딩 대기)
             savedRecord = (HistoryRecord) getIntent().getSerializableExtra("record");
             savedResult = (AnalysisResult) getIntent().getParcelableExtra("analysis_result");
         } else if (isVideoMode) {
-            // Case 2: 영상 URL 분석 (서버 통신 필요)
             performVideoAnalysis(getIntent().getStringExtra("video_url"));
         } else if (isFromUrl) {
-            // Case 3: 이미지 URL 분석 (다운로드 후 AI 분석)
             loadAndAnalyzeUrlImage(getIntent().getStringExtra("image_url"));
-        } else if (isLocalImage) {
-            // Case 4: 일반 이미지 (갤러리/카메라 비트맵 분석) - BitmapHolder에서 꺼내서 씁니다.
-            if (BitmapHolder.originalBitmap != null) {
-                new Thread(() -> performAnalysis(BitmapHolder.originalBitmap)).start();
+        } else {
+            // ⭐️ [수정] Intent 용량 제한 회피를 위해 BitmapHolder에서 직접 가져옵니다.
+            Bitmap bitmap = BitmapHolder.originalBitmap;
+            if (bitmap != null) {
+                new Thread(() -> performAnalysis(bitmap)).start();
             } else {
-                finishWithError("이미지 데이터를 찾을 수 없습니다.");
+                finishWithError("분석할 이미지가 없습니다.");
             }
         }
     }
 
-    // [서버] 영상 분석 요청
     private void performVideoAnalysis(String url) {
         Retrofit retrofit = new Retrofit.Builder()
                 .baseUrl(ServerConfig.getBaseUrl())
@@ -107,12 +101,14 @@ public class LoadingActivity extends AppCompatActivity {
         });
     }
 
-    // [서버] 영상 분석 결과 처리 (히트맵 생성 및 DB 저장)
     private void processVideoServerResult(VideoAnalysisResponse res) {
         new Thread(() -> {
             try {
                 byte[] bytes = Base64.decode(res.getFrameBase64(), Base64.DEFAULT);
                 Bitmap frameBitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+                
+                // 영상 분석의 경우 서버에서 받은 프레임을 홀더에 저장
+                BitmapHolder.originalBitmap = frameBitmap;
 
                 // 원본 영상 프레임을 보관소에 저장
                 BitmapHolder.originalBitmap = frameBitmap;
@@ -147,14 +143,20 @@ public class LoadingActivity extends AppCompatActivity {
         }).start();
     }
 
-    // [AI] 이미지 분석 로직 (로컬 TFLite)
     private void performAnalysis(Bitmap bitmap) {
-        try {
-            // 원본 이미지를 보관소에 저장
-            BitmapHolder.originalBitmap = bitmap;
+        if (bitmap == null) {
+            finishWithError("이미지 데이터가 없습니다.");
+            return;
+        }
 
+        try {
+            // 메모리 부족 방지를 위해 리사이징
+            Bitmap scaledBitmap = scaleBitmapIfNeeded(bitmap);
+            // ⭐️ 분석에 쓰인 최적화된 이미지를 다시 홀더에 넣어 다음 화면에서 쓰게 함
+            BitmapHolder.originalBitmap = scaledBitmap;
+            
             AiProcessor aiProcessor = new AiProcessor(this);
-            TensorImage processedImage = aiProcessor.processImage(bitmap);
+            TensorImage processedImage = aiProcessor.processImage(scaledBitmap);
             Map<String, Object> results = aiProcessor.runInference(processedImage);
 
             float score = (float) results.get("score");
@@ -167,17 +169,39 @@ public class LoadingActivity extends AppCompatActivity {
             float prob = score * 100f;
             savedResult = new AnalysisResult(prob, null);
 
-            new FirebaseManager().uploadAnalysisResult(new AnalysisResult(prob, heatmapBitmap), bitmap, record -> {
+            new FirebaseManager().uploadAnalysisResult(new AnalysisResult(prob, heatmapBitmap), scaledBitmap, record -> {
                 savedRecord = record;
                 checkDataAndMove();
             });
-        } catch (Exception e) { Log.e(TAG, "분석 오류", e); }
+        } catch (Exception e) {
+            Log.e(TAG, "분석 오류", e);
+            finishWithError("AI 분석 중 오류가 발생했습니다.");
+        }
+    }
+
+    private Bitmap scaleBitmapIfNeeded(Bitmap bitmap) {
+        int maxSide = 1024;
+        if (bitmap.getWidth() <= maxSide && bitmap.getHeight() <= maxSide) return bitmap;
+
+        int width = bitmap.getWidth();
+        int height = bitmap.getHeight();
+        float ratio = (float) width / (float) height;
+
+        if (width > height) {
+            width = maxSide;
+            height = (int) (maxSide / ratio);
+        } else {
+            height = maxSide;
+            width = (int) (maxSide * ratio);
+        }
+        return Bitmap.createScaledBitmap(bitmap, width, height, true);
     }
 
     private void loadAndAnalyzeUrlImage(String url) {
         Glide.with(this).asBitmap().load(url).into(new CustomTarget<Bitmap>() {
             @Override
             public void onResourceReady(@NonNull Bitmap res, @Nullable Transition<? super Bitmap> t) {
+                // ⭐️ URL 분석 이미지도 홀더에 보관
                 BitmapHolder.originalBitmap = res;
                 new Thread(() -> performAnalysis(res)).start();
             }
@@ -187,8 +211,6 @@ public class LoadingActivity extends AppCompatActivity {
             public void onLoadCleared(@Nullable Drawable p) {}
         });
     }
-
-    // --- 애니메이션 및 화면 전환 로직 ---
 
     private void startLoadingAnimation() {
         ValueAnimator animator = ValueAnimator.ofInt(0, 100);
@@ -224,27 +246,25 @@ public class LoadingActivity extends AppCompatActivity {
     }
 
     private void checkDataAndMove() {
-        // 애니메이션이 끝났고(isAnimationFinished), DB 저장(savedRecord)도 완료되었다면
         if (isAnimationFinished && savedRecord != null) {
             new Handler(Looper.getMainLooper()).post(() -> {
                 Intent nextIntent = new Intent(LoadingActivity.this, ResultActivity.class);
 
-                // 1. 분석 결과 정보 전달
                 nextIntent.putExtra("record", savedRecord);
                 nextIntent.putExtra("analysis_result", savedResult);
 
-                // ⭐️ [수정된 부분] 앱을 튕기게 만들었던 무거운 byte[] 전달 코드를 완전히 삭제했습니다!
-                // ResultActivity에서는 이제 안전하게 BitmapHolder를 통해 이미지를 띄웁니다.
-
-                // URL 분석인 경우 주소만 텍스트(String)로 전달 (가벼움)
+                // ⭐️ 이제 용량 큰 byte[]는 아예 보내지 않습니다.
                 String originalUri = getIntent().getStringExtra("original_image_uri");
+                if (originalUri == null) {
+                    originalUri = getIntent().getStringExtra("image_url");
+                }
+                
                 if (originalUri != null) {
                     nextIntent.putExtra("original_image_uri", originalUri);
                 }
 
                 startActivity(nextIntent);
                 finish();
-                // 부드러운 화면 전환
                 overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
             });
         }
