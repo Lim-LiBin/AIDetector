@@ -150,15 +150,53 @@ public class MainActivity extends AppCompatActivity {
 
         viewFinder.setVisibility(View.GONE);
         galleryImageView.setVisibility(View.VISIBLE);
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                currentBitmap = ImageDecoder.decodeBitmap(ImageDecoder.createSource(this.getContentResolver(), uri), (decoder, info, src) -> decoder.setMutableRequired(true));
-            } else {
-                currentBitmap = MediaStore.Images.Media.getBitmap(this.getContentResolver(), uri);
-            }
+
+        // ⭐️ [수정 핵심] 원본 해상도 그대로 가져오지 않고 안전하게 리사이징하여 가져옵니다.
+        currentBitmap = getResizedBitmap(uri, 1024);
+
+        if (currentBitmap != null) {
             galleryImageView.setImageBitmap(currentBitmap);
             btnCapture.setText("검사 시작");
-        } catch (IOException e) { e.printStackTrace(); }
+        } else {
+            Toast.makeText(this, "이미지를 불러오는데 실패했습니다.", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    // ⭐️ [추가된 메서드] OOM(메모리 부족) 방지를 위한 안전한 비트맵 리사이징 유틸리티
+    private Bitmap getResizedBitmap(Uri uri, int maxResolution) {
+        try {
+            // 1. 메모리 할당 없이 이미지의 크기만 먼저 읽어옵니다.
+            BitmapFactory.Options options = new BitmapFactory.Options();
+            options.inJustDecodeBounds = true;
+            InputStream inputStream = getContentResolver().openInputStream(uri);
+            BitmapFactory.decodeStream(inputStream, null, options);
+            inputStream.close();
+
+            // 2. 얼마나 줄일지 비율(inSampleSize)을 계산합니다.
+            int width = options.outWidth;
+            int height = options.outHeight;
+            int inSampleSize = 1;
+
+            if (width > maxResolution || height > maxResolution) {
+                final int halfHeight = height / 2;
+                final int halfWidth = width / 2;
+                while ((halfHeight / inSampleSize) >= maxResolution && (halfWidth / inSampleSize) >= maxResolution) {
+                    inSampleSize *= 2;
+                }
+            }
+
+            // 3. 계산된 비율로 진짜 비트맵을 메모리에 올립니다.
+            options.inJustDecodeBounds = false;
+            options.inSampleSize = inSampleSize;
+            inputStream = getContentResolver().openInputStream(uri);
+            Bitmap resizedBitmap = BitmapFactory.decodeStream(inputStream, null, options);
+            inputStream.close();
+
+            return resizedBitmap;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
     }
 
     // 분석 실행

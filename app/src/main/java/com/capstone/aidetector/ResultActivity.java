@@ -186,6 +186,8 @@ public class ResultActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        // 메모리 누수를 막기 위해 액티비티가 종료될 때 둘 다 비워줍니다.
         BitmapHolder.heatmapBitmap = null;
+        BitmapHolder.originalBitmap = null;
     }
 }

@@ -60,6 +60,7 @@ public class LoadingActivity extends AppCompatActivity {
         boolean isVideoMode = getIntent().getBooleanExtra("is_video_mode", false);
         boolean isFromUrl = getIntent().getBooleanExtra("is_from_url", false);
         boolean isAlreadyAnalyzed = getIntent().getBooleanExtra("is_already_analyzed", false);
+        boolean isLocalImage = getIntent().getBooleanExtra("is_local_image", false);
 
         startLoadingAnimation();
 
@@ -107,6 +108,9 @@ public class LoadingActivity extends AppCompatActivity {
                 Bitmap frameBitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
                 
                 // 영상 분석의 경우 서버에서 받은 프레임을 홀더에 저장
+                BitmapHolder.originalBitmap = frameBitmap;
+
+                // 원본 영상 프레임을 보관소에 저장
                 BitmapHolder.originalBitmap = frameBitmap;
 
                 List<List<Float>> heatmapList = res.getHeatmap();
