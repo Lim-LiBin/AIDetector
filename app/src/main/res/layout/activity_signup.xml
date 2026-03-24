@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#110E1B">
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="120dp"
+        android:paddingHorizontal="16dp"
+        android:layout_marginBottom="40dp">
+
+        <ImageButton
+            android:id="@+id/back_btn"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_alignParentStart="true"
+            android:layout_centerVertical="true"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_back"
+            app:tint="#00D2FF" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="회원가입"
+            android:textSize="28sp"
+            android:textStyle="bold"
+            android:textColor="#00D2FF"
+            android:layout_centerInParent="true" />
+    </RelativeLayout>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:paddingHorizontal="32dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingBottom="20dp">
+
+            <EditText
+                android:id="@+id/name_input"
+                android:layout_width="match_parent"
+                android:layout_height="60dp"
+                android:hint="이름"
+                android:textColorHint="#AAAAAA"
+                android:textColor="#FFFFFF"
+                android:background="#1E1838"
+                android:padding="16dp"
+                android:layout_marginBottom="16dp"
+                android:inputType="textPersonName" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="16dp">
+
+                <EditText
+                    android:id="@+id/email_input"
+                    android:layout_width="0dp"
+                    android:layout_height="60dp"
+                    android:layout_weight="1"
+                    android:hint="아이디(이메일)"
+                    android:textColorHint="#AAAAAA"
+                    android:textColor="#FFFFFF"
+                    android:background="#1E1838"
+                    android:padding="16dp"
+                    android:inputType="textEmailAddress" />
+
+                <Button
+                    android:id="@+id/check_btn"
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:text="중복 확인"
+                    android:layout_marginStart="8dp"
+                    android:backgroundTint="#5A4FCF"
+                    android:textColor="#FFFFFF"/>
+            </LinearLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/pw_layout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:passwordToggleEnabled="true"
+                app:passwordToggleTint="#00D2FF"
+                app:hintEnabled="false"
+                app:errorEnabled="true"
+                android:layout_marginBottom="4dp">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/pw_input"
+                    android:layout_width="match_parent"
+                    android:layout_height="60dp"
+                    android:hint="비밀번호"
+                    android:textColorHint="#AAAAAA"
+                    android:textColor="#FFFFFF"
+                    android:background="#1E1838"
+                    android:padding="16dp"
+                    android:inputType="textPassword" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/pw_confirm_layout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:passwordToggleEnabled="true"
+                app:passwordToggleTint="#00D2FF"
+                app:hintEnabled="false"
+                app:errorEnabled="true"
+                android:layout_marginBottom="8dp">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/pw_confirm_input"
+                    android:layout_width="match_parent"
+                    android:layout_height="60dp"
+                    android:hint="비밀번호 확인"
+                    android:textColorHint="#AAAAAA"
+                    android:textColor="#FFFFFF"
+                    android:background="#1E1838"
+                    android:padding="16dp"
+                    android:inputType="textPassword" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <EditText
+                android:id="@+id/phone_input"
+                android:layout_width="match_parent"
+                android:layout_height="60dp"
+                android:hint="전화번호(010-0000-0000)"
+                android:textColorHint="#AAAAAA"
+                android:textColor="#FFFFFF"
+                android:background="#1E1838"
+                android:padding="16dp"
+                android:inputType="phone" />
+
+        </LinearLayout>
+    </ScrollView>
+
+    <CheckBox
+        android:id="@+id/terms_checkbox"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="필수 이용약관에 동의합니다."
+        android:textColor="#FFFFFF"
+        app:buttonTint="#00D2FF"
+        android:layout_gravity="center"
+        android:layout_marginBottom="16dp" />
+
+    <Button
+        android:id="@+id/signup_btn"
+        android:layout_width="200dp"
+        android:layout_height="60dp"
+        android:text="회원가입 하기"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:textColor="#AAAAAA"
+        android:backgroundTint="#1E1838"
+        app:cornerRadius="30dp"
+        android:layout_gravity="center"
+        android:layout_marginBottom="40dp" />
+
+</LinearLayout>

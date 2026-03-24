@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="24dp"
+    android:background="#FFFFFF">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="필수 이용약관 동의"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="16dp" />
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="250dp"
+        android:background="#F5F5F5"
+        android:padding="12dp"
+        android:layout_marginBottom="16dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="[필수] 개인정보 수집 및 이용 동의\n\nD-Tect 서비스 제공을 위하여 아래와 같이 개인정보를 수집 및 이용합니다. 내용을 자세히 읽으신 후 동의 여부를 결정하여 주십시오.\n\n1. 수집하는 개인정보 항목\n- 회원가입 시: 이름, 아이디(이메일), 비밀번호, 전화번호\n- 서비스 이용 시: AI 판별을 위해 업로드하는 모든 종류의 이미지 및 영상 데이터, 판별 이력(History)\n\n2. 개인정보의 수집 및 이용 목적\n- 회원 가입 의사 확인, 이용자 본인 식별 및 인증\n- AI 기반 가짜 이미지/영상 탐지 서비스 제공 및 결과 저장\n- 서비스 부정이용 방지 및 고객 문의 대응\n\n3. 개인정보의 보유 및 이용 기간\n- 원칙적으로 회원의 탈퇴 등 개인정보 수집 및 이용 목적이 달성된 후에는 해당 정보를 지체 없이 파기합니다.\n- 단, 관계 법령의 규정에 의하여 보존할 필요가 있는 경우 해당 기간 동안 보관합니다.\n\n4. 동의를 거부할 권리 및 불이익\n- 귀하는 개인정보 수집 및 이용에 대한 동의를 거부할 권리가 있습니다. 단, 본 동의는 서비스 이용을 위한 필수적인 항목이므로 동의를 거부하실 경우 회원가입 및 D-Tect 서비스 이용이 제한됩니다."
+            android:lineSpacingExtra="4dp"
+            android:textSize="14sp" />
+    </ScrollView>
+
+    <CheckBox
+        android:id="@+id/dialog_terms_checkbox"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="위 약관을 모두 읽었으며 동의합니다."
+        android:layout_marginBottom="24dp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="end">
+
+        <Button
+            android:id="@+id/btn_close"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="닫기"
+            style="?android:attr/buttonBarButtonStyle" />
+
+        <Button
+            android:id="@+id/btn_confirm"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="동의 완료"
+            android:enabled="false"
+            style="?android:attr/buttonBarButtonStyle" />
+    </LinearLayout>
+</LinearLayout>
