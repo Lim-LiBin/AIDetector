@@ -23,7 +23,7 @@ public class AiProcessor {
     private static final String TAG = "AiProcessor";
     private Interpreter interpreter;
     private NnApiDelegate nnApiDelegate;
-    private static final String MODEL_PATH = "model.tflite";
+    private static final String MODEL_PATH = "model2.tflite";
 
     // [v3 모델 구조 반영]
     // 코랩 분석 결과에 따라 인덱스가 바뀔 수 있으니 로그를 꼭 확인하세요.
