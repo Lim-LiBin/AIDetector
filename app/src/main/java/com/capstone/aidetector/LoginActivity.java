@@ -58,7 +58,8 @@ public class LoginActivity extends AppCompatActivity {
 
         // [비밀번호 찾기 클릭]
         findPwText.setOnClickListener(v -> {
-            Toast.makeText(this, "비밀번호 찾기 기능은 준비 중입니다.", Toast.LENGTH_SHORT).show();
+            Intent intent = new Intent(LoginActivity.this, FindPasswordActivity.class);
+            startActivity(intent);
         });
     }
 
