@@ -252,7 +252,23 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private boolean isVideoUrl(String url) {
-        return url.contains("youtube.com/watch") || url.contains("youtu.be/") || url.matches(".*(?i)\\.(mp4|avi|mov|wmv|flv|webm)(\\?.*)?$");
+        String lowerUrl = url.toLowerCase();
+
+        // 유튜브 (일반 + 단축 + 쇼츠)
+        if (lowerUrl.contains("youtube.com/watch") ||
+                lowerUrl.contains("youtu.be/") ||
+                lowerUrl.contains("/shorts/")) {
+            return true;
+        }
+
+        // 인스타그램 릴스
+        if (lowerUrl.contains("instagram.com/reel/") ||
+                lowerUrl.contains("instagram.com/p/")) {
+            return true;
+        }
+
+        // 일반 영상 확장자
+        return url.matches(".*(?i)\\.(mp4|avi|mov|wmv|flv|webm)(\\?.*)?$");
     }
 
     private void processImageUrl(String url) {
