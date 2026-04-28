@@ -57,6 +57,9 @@
         <activity android:name=".SettingsActivity"
             android:exported="false" />
 
+        <activity android:name=".ContactActivity"
+            android:exported="false" />
+
     </application>
 
 </manifest>
