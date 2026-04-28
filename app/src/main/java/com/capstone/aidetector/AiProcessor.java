@@ -60,15 +60,17 @@ public class AiProcessor {
     /**
      * [핵심 수정] 파이썬 ImageDataGenerator(rescale=1./255)와 동일하게 세팅
      */
+    // AiProcessor.java 내 processImage 수정
     public TensorImage processImage(Bitmap bitmap) {
         ImageProcessor imageProcessor = new ImageProcessor.Builder()
+                // 1. 먼저 리사이징 (PIL과 최대한 비슷한 알고리즘)
                 .add(new ResizeOp(224, 224, ResizeOp.ResizeMethod.BILINEAR))
-                // NormalizeOp(mean, std): (pixel - mean) / std
-                // (pixel - 0.0f) / 255.0f -> 0~1 범위로 정규화
+                // 2. 그 다음 정규화
                 .add(new NormalizeOp(0.0f, 255.0f))
                 .build();
 
         TensorImage tensorImage = new TensorImage(DataType.FLOAT32);
+        // ⭐️ Bitmap을 로드할 때 ARGB_8888 형식을 유지하는지 확인
         tensorImage.load(bitmap);
         return imageProcessor.process(tensorImage);
     }

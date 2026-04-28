@@ -165,36 +165,18 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // ⭐️ [추가된 메서드] OOM(메모리 부족) 방지를 위한 안전한 비트맵 리사이징 유틸리티
+    // MainActivity.java 내 getResizedBitmap 수정
     private Bitmap getResizedBitmap(Uri uri, int maxResolution) {
         try {
-            // 1. 메모리 할당 없이 이미지의 크기만 먼저 읽어옵니다.
-            BitmapFactory.Options options = new BitmapFactory.Options();
-            options.inJustDecodeBounds = true;
             InputStream inputStream = getContentResolver().openInputStream(uri);
-            BitmapFactory.decodeStream(inputStream, null, options);
+            // ⭐️ [수정] 옵션 설정 없이 원본을 그대로 읽어옵니다. (메모리가 허용하는 한)
+            Bitmap rawBitmap = BitmapFactory.decodeStream(inputStream);
             inputStream.close();
 
-            // 2. 얼마나 줄일지 비율(inSampleSize)을 계산합니다.
-            int width = options.outWidth;
-            int height = options.outHeight;
-            int inSampleSize = 1;
+            if (rawBitmap == null) return null;
 
-            if (width > maxResolution || height > maxResolution) {
-                final int halfHeight = height / 2;
-                final int halfWidth = width / 2;
-                while ((halfHeight / inSampleSize) >= maxResolution && (halfWidth / inSampleSize) >= maxResolution) {
-                    inSampleSize *= 2;
-                }
-            }
-
-            // 3. 계산된 비율로 진짜 비트맵을 메모리에 올립니다.
-            options.inJustDecodeBounds = false;
-            options.inSampleSize = inSampleSize;
-            inputStream = getContentResolver().openInputStream(uri);
-            Bitmap resizedBitmap = BitmapFactory.decodeStream(inputStream, null, options);
-            inputStream.close();
-
-            return resizedBitmap;
+            // 이후 scaleBitmapIfNeeded 등에서 부드럽게 리사이징되도록 넘겨줍니다.
+            return rawBitmap;
         } catch (Exception e) {
             e.printStackTrace();
             return null;
