@@ -141,7 +141,10 @@ public class LoadingActivity extends AppCompatActivity {
                 savedResult = new AnalysisResult(prob, null);
                 AnalysisResult uploadResult = new AnalysisResult(prob, heatmapBitmap);
 
-                new FirebaseManager().uploadAnalysisResult(uploadResult, frameBitmap, record -> {
+                // MainActivity에서 받아온 snsUrl을 전달
+                String snsUrl = getIntent().getStringExtra("snsUrl");
+
+                new FirebaseManager().uploadAnalysisResult(uploadResult, frameBitmap, snsUrl, record -> {
                     savedRecord = record;
                     checkDataAndMove();
                 });
@@ -167,7 +170,7 @@ public class LoadingActivity extends AppCompatActivity {
             Bitmap scaledBitmap = scaleBitmapIfNeeded(bitmap);
             // ⭐️ 분석에 쓰인 최적화된 이미지를 다시 홀더에 넣어 다음 화면에서 쓰게 함
             BitmapHolder.originalBitmap = scaledBitmap;
-            
+
             AiProcessor aiProcessor = new AiProcessor(this);
             TensorImage processedImage = aiProcessor.processImage(scaledBitmap);
             Map<String, Object> results = aiProcessor.runInference(processedImage);
@@ -187,7 +190,10 @@ public class LoadingActivity extends AppCompatActivity {
             float prob = score * 100f;
             savedResult = new AnalysisResult(prob, null);
 
-            new FirebaseManager().uploadAnalysisResult(new AnalysisResult(prob, heatmapBitmap), scaledBitmap, record -> {
+            // MainActivity에서 받아온 snsUrl을 전달
+            String snsUrl = getIntent().getStringExtra("snsUrl");
+
+            new FirebaseManager().uploadAnalysisResult(new AnalysisResult(prob, heatmapBitmap), scaledBitmap, snsUrl, record -> {
                 savedRecord = record;
                 checkDataAndMove();
             });
@@ -276,7 +282,7 @@ public class LoadingActivity extends AppCompatActivity {
                 if (originalUri == null) {
                     originalUri = getIntent().getStringExtra("image_url");
                 }
-                
+
                 if (originalUri != null) {
                     nextIntent.putExtra("original_image_uri", originalUri);
                 }

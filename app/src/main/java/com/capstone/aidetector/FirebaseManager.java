@@ -3,7 +3,7 @@ package com.capstone.aidetector;
 import android.graphics.Bitmap;
 import android.util.Log;
 
-import com.google.firebase.auth.FirebaseAuth; // 추가: 인증 정보 가져오기
+import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.Query;
@@ -20,7 +20,7 @@ public class FirebaseManager {
     private static final String TAG = "FirebaseManager";
     private final FirebaseStorage storage = FirebaseStorage.getInstance();
     private final FirebaseFirestore db = FirebaseFirestore.getInstance();
-    private final FirebaseAuth auth = FirebaseAuth.getInstance(); // 추가
+    private final FirebaseAuth auth = FirebaseAuth.getInstance(); // 인증 정보 인스턴스 (UID 획득용)
 
     public interface OnUploadCompleteListener {
         void onComplete(HistoryRecord record);
@@ -34,7 +34,7 @@ public class FirebaseManager {
         return "unknown_user"; // 예외 방지용 (로그인 안 된 상태)
     }
 
-    public void uploadAnalysisResult(AnalysisResult result, Bitmap originalBitmap, OnUploadCompleteListener listener) {
+    public void uploadAnalysisResult(AnalysisResult result, Bitmap originalBitmap, String snsUrl, OnUploadCompleteListener listener) {
         if (result == null || result.heatmapBitmap == null || originalBitmap == null) {
             Log.e(TAG, "업로드 실패: 데이터가 부족합니다.");
             return;
@@ -52,12 +52,13 @@ public class FirebaseManager {
 
         originalRef.putBytes(originalBaos.toByteArray()).addOnSuccessListener(task -> {
             originalRef.getDownloadUrl().addOnSuccessListener(originalUri -> {
-                uploadHeatmap(result, timestampStr, originalUri.toString(), listener);
+                // 히트맵 업로드 시 SNS 주소 동시 전달 (데이터 유지용)
+                uploadHeatmap(result, timestampStr, originalUri.toString(), snsUrl, listener);
             });
         }).addOnFailureListener(e -> Log.e(TAG, "원본 업로드 실패: " + e.getMessage()));
     }
 
-    private void uploadHeatmap(AnalysisResult result, String timestampStr, String originalUrl, OnUploadCompleteListener listener) {
+    private void uploadHeatmap(AnalysisResult result, String timestampStr, String originalUrl, String snsUrl, OnUploadCompleteListener listener) {
         String uid = getUid();
         ByteArrayOutputStream heatmapBaos = new ByteArrayOutputStream();
         result.heatmapBitmap.compress(Bitmap.CompressFormat.JPEG, 90, heatmapBaos);
@@ -68,12 +69,13 @@ public class FirebaseManager {
 
         heatmapRef.putBytes(heatmapBaos.toByteArray()).addOnSuccessListener(task -> {
             heatmapRef.getDownloadUrl().addOnSuccessListener(heatmapUri -> {
-                saveToFirestore(result.probability, originalUrl, heatmapUri.toString(), listener);
+                // Firestore 저장 시 SNS 주소 동시 전달 (데이터 유지용)
+                saveToFirestore(result.probability, originalUrl, heatmapUri.toString(), snsUrl, listener);
             });
         }).addOnFailureListener(e -> Log.e(TAG, "히트맵 업로드 실패: " + e.getMessage()));
     }
 
-    private void saveToFirestore(float probability, String originalUrl, String heatmapUrl, OnUploadCompleteListener listener) {
+    private void saveToFirestore(float probability, String originalUrl, String heatmapUrl, String snsUrl, OnUploadCompleteListener listener) {
         String uid = getUid(); // 실제 UID 사용
         String resultStatus = (probability >= 50.0f) ? "Fake" : "Real";
         java.util.Date now = new java.util.Date();
@@ -84,6 +86,7 @@ public class FirebaseManager {
         data.put("probability", probability);
         data.put("originalUrl", originalUrl);
         data.put("heatmapUrl", heatmapUrl);
+        data.put("snsUrl", snsUrl); // 원본 SNS 주소 추가 (Firestore 기록용)
         data.put("timestamp", now);
 
         db.collection("results").add(data)
@@ -97,6 +100,7 @@ public class FirebaseManager {
                     newRecord.setProbability(probability);
                     newRecord.setOriginalUrl(originalUrl);
                     newRecord.setHeatmapUrl(heatmapUrl);
+                    newRecord.setSnsUrl(snsUrl); // 원본 SNS 주소 세팅 (객체 반환용)
                     newRecord.setTimestamp(now);
 
                     if (listener != null) {
