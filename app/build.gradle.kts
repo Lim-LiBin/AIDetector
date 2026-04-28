@@ -5,7 +5,14 @@ plugins {
 
 android {
     namespace = "com.capstone.aidetector"
-    compileSdk = 36 // 에러 방지를 위해 직접 숫자로 지정했습니다.
+    compileSdk = 36
+
+    // 16KB 페이지 호환성 에러 방지를 위해 추가
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
 
     defaultConfig {
         applicationId = "com.capstone.aidetector"
@@ -65,12 +72,12 @@ dependencies {
     implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
     implementation("androidx.camera:camera-view:$cameraxVersion")
 
-    // 🔥 TensorFlow Lite 라이브러리 추가 (AiProcessor 에러 해결)
+    // 🔥 TensorFlow Lite 라이브러리
     implementation("org.tensorflow:tensorflow-lite-support:0.4.4")
     implementation("org.tensorflow:tensorflow-lite:2.14.0")
     //implementation("com.google.ai.edge.litert:litert:1.0.1")
 
-    // Glide 라이브러리 추가
+    // Glide (이미지 로드)
     implementation("com.github.bumptech.glide:glide:4.16.0")
     annotationProcessor("com.github.bumptech.glide:compiler:4.16.0")
 
@@ -81,7 +88,6 @@ dependencies {
     // OkHttp (로깅)
     implementation("com.squareup.okhttp3:logging-interceptor:4.11.0")
 
-    // Glide (이미지 로드)
-    //implementation("com.github.bumptech.glide:glide:4.15.1")
-    //annotationProcessor("com.github.bumptech.glide:compiler:4.15.1")
+    // ✅ 카카오톡 공유 SDK 추가
+    implementation("com.kakao.sdk:v2-share:2.20.1")
 }

@@ -37,6 +37,9 @@ public class ResultActivity extends AppCompatActivity {
     private FirebaseManager firebaseManager = new FirebaseManager();
     private HistoryRecord currentRecord;
 
+    // [공유 기능 추가] 결과 텍스트를 저장할 변수
+    private String shareSummary = "";
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -45,8 +48,10 @@ public class ResultActivity extends AppCompatActivity {
         initViews();
         setupToolbar();
 
-        // currentRecord를 먼저 할당해야 receiveAndSetData에서 활용 가능합니다.
-        currentRecord = (HistoryRecord) getIntent().getSerializableExtra("record");
+        // currentRecord 할당 위치 조정 (데이터 로딩 전/후 상관없이 안전하게 체크)
+        if (getIntent().hasExtra("record")) {
+            currentRecord = (HistoryRecord) getIntent().getSerializableExtra("record");
+        }
 
         receiveAndSetData();
         setupSlider();
@@ -69,6 +74,16 @@ public class ResultActivity extends AppCompatActivity {
         toolbar.inflateMenu(R.menu.menu_result);
 
         Menu menu = toolbar.getMenu();
+
+        // [공유 기능 추가] 공유 메뉴 아이템 스타일 설정
+        MenuItem shareItem = menu.findItem(R.id.action_share);
+        if (shareItem != null) {
+            SpannableString s = new SpannableString(shareItem.getTitle());
+            s.setSpan(new ForegroundColorSpan(Color.parseColor("#000000")), 0, s.length(), 0);
+            s.setSpan(new StyleSpan(Typeface.BOLD), 0, s.length(), 0);
+            shareItem.setTitle(s);
+        }
+
         MenuItem deleteItem = menu.findItem(R.id.action_delete);
         if (deleteItem != null) {
             SpannableString s = new SpannableString(deleteItem.getTitle());
@@ -95,8 +110,18 @@ public class ResultActivity extends AppCompatActivity {
 
         toolbar.setNavigationOnClickListener(v -> finish());
 
+        // [수정된 부분] 공유하기 메뉴 클릭 리스너 연결
         toolbar.setOnMenuItemClickListener(item -> {
-            if (item.getItemId() == R.id.action_delete) {
+            int id = item.getItemId();
+            if (id == R.id.action_share) {
+                // 🚀 공유 로직 실행
+                Intent sendIntent = new Intent();
+                sendIntent.setAction(Intent.ACTION_SEND);
+                sendIntent.putExtra(Intent.EXTRA_TEXT, "[D-Tect 분석 결과]\n" + shareSummary);
+                sendIntent.setType("text/plain");
+                startActivity(Intent.createChooser(sendIntent, "결과 공유하기"));
+                return true;
+            } else if (id == R.id.action_delete) {
                 showDeleteConfirmDialog();
                 return true;
             } else if (item.getItemId() == R.id.action_report) {
@@ -132,16 +157,13 @@ public class ResultActivity extends AppCompatActivity {
         boolean fromHistory = intent.getBooleanExtra("from_history", false);
 
         if (fromHistory) {
-            // --- 이력에서 온 경우 ---
+            currentRecord = (HistoryRecord) intent.getSerializableExtra("record");
             if (currentRecord != null) {
                 updateUIByResult(currentRecord.getResult(), currentRecord.getProbability());
                 Glide.with(this).load(currentRecord.getOriginalUrl()).into(ivOriginalImage);
                 Glide.with(this).load(currentRecord.getHeatmapUrl()).into(ivHeatmapImage);
             }
         } else {
-            // --- 방금 막 분석을 완료하고 로딩 화면을 거쳐 넘어온 경우 ---
-
-            // 1. 원본 이미지 표시 (바이트 배열 -> 로컬 URI -> Firebase URL 순서로 확인)
             if (intent.hasExtra("original_image_bytes")) {
                 byte[] byteArray = intent.getByteArrayExtra("original_image_bytes");
                 if (byteArray != null) {
@@ -156,7 +178,6 @@ public class ResultActivity extends AppCompatActivity {
                 Glide.with(this).load(currentRecord.getOriginalUrl()).into(ivOriginalImage);
             }
 
-            // 2. 히트맵 및 결과 텍스트 표시
             AnalysisResult result = intent.getParcelableExtra("analysis_result");
             if (result != null) {
                 updateUIByResult(result.probability >= 50.0f ? "Fake" : "Real", result.probability);
@@ -172,13 +193,17 @@ public class ResultActivity extends AppCompatActivity {
         boolean isFake = "Fake".equalsIgnoreCase(result) || probability >= 50.0f;
 
         if (isFake) {
-            tvResultText.setText(String.format("판별 결과 : 거짓 (%.1f%%)", probability));
+            // [공유 기능 추가] shareSummary 변수 업데이트
+            shareSummary = String.format("판별 결과 : 거짓 (%.1f%%)", probability);
+            tvResultText.setText(shareSummary);
             tvResultText.setTextColor(Color.parseColor("#FF5E62"));
             pbResultGauge.setProgressTintList(ColorStateList.valueOf(Color.parseColor("#FF5E62")));
             ivHeatmapImage.setVisibility(View.VISIBLE);
             sbOpacitySlider.setEnabled(true);
         } else {
-            tvResultText.setText(String.format("판별 결과 : 참 (%.1f%%)", probability));
+            // [공유 기능 추가] shareSummary 변수 업데이트
+            shareSummary = String.format("판별 결과 : 참 (%.1f%%)", probability);
+            tvResultText.setText(shareSummary);
             tvResultText.setTextColor(Color.parseColor("#00D2FF"));
             pbResultGauge.setProgressTintList(ColorStateList.valueOf(Color.parseColor("#00D2FF")));
             ivHeatmapImage.setVisibility(View.INVISIBLE);
