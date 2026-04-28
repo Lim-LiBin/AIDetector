@@ -12,6 +12,11 @@ public class HistoryRecord implements Serializable {
     private String heatmapUrl;  // 히트맵 이미지 Storage 주소
     private Date timestamp; // 서버 저장 시간 (정렬 기준)
 
+    private String snsUrl;
+
+    public String getSnsUrl() { return snsUrl;}
+    public void setSnsUrl(String snsUrl) {this.snsUrl = snsUrl; }
+
     // 빈 생성자 (Firestore가 데이터를 자동으로 변환할 때 필요)
     public HistoryRecord() {}
 

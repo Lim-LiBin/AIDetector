@@ -47,12 +47,17 @@ public class ResultActivity extends AppCompatActivity {
 
         initViews();
         setupToolbar();
-        receiveAndSetData();
-        setupSlider();
 
         // currentRecord 할당 위치 조정 (데이터 로딩 전/후 상관없이 안전하게 체크)
         if (getIntent().hasExtra("record")) {
             currentRecord = (HistoryRecord) getIntent().getSerializableExtra("record");
+        }
+
+        receiveAndSetData();
+        setupSlider();
+
+        if (currentRecord == null) {
+            Log.d("ResultActivity", "방금 분석한 결과입니다. (이력 데이터 없음)");
         }
     }
 
@@ -86,6 +91,22 @@ public class ResultActivity extends AppCompatActivity {
             s.setSpan(new StyleSpan(Typeface.BOLD), 0, s.length(), 0);
             deleteItem.setTitle(s);
         }
+        MenuItem contactItem = menu.findItem(R.id.action_contact);
+        if (contactItem != null) {
+            SpannableString s = new SpannableString(contactItem.getTitle());
+            s.setSpan(new ForegroundColorSpan(Color.parseColor("#000000")), 0, s.length(), 0);
+            s.setSpan(new StyleSpan(Typeface.BOLD), 0, s.length(), 0);
+            contactItem.setTitle(s);
+        }
+
+        // 신고하기 버튼 폰트 설정
+        MenuItem reportItem = menu.findItem(R.id.action_report);
+        if (reportItem != null) {
+            SpannableString s = new SpannableString(reportItem.getTitle());
+            s.setSpan(new ForegroundColorSpan(Color.parseColor("#000000")), 0, s.length(), 0);
+            s.setSpan(new StyleSpan(Typeface.BOLD), 0, s.length(), 0);
+            reportItem.setTitle(s);
+        }
 
         toolbar.setNavigationOnClickListener(v -> finish());
 
@@ -103,9 +124,30 @@ public class ResultActivity extends AppCompatActivity {
             } else if (id == R.id.action_delete) {
                 showDeleteConfirmDialog();
                 return true;
+            } else if (item.getItemId() == R.id.action_report) {
+                executeReport(); // 팝업 없이 바로 신고 페이지 이동
+            }else if (item.getItemId() == R.id.action_contact) {
+                // 문의하기 화면으로 이동
+                Intent intent = new Intent(this, ContactActivity.class);
+                startActivity(intent);
+                return true;
             }
             return false;
         });
+    }
+
+    // URL을 가져오는 공통 메서드 분리
+    private String getSnsUrl() {
+        if (currentRecord != null && currentRecord.getSnsUrl() != null) {
+            return currentRecord.getSnsUrl();
+        } else {
+            Intent intent = getIntent();
+            if (intent == null) return null;
+            String url = intent.getStringExtra("snsUrl");
+            if (url == null) url = intent.getStringExtra("image_url");
+            if (url == null) url = intent.getStringExtra("video_url");
+            return url;
+        }
     }
 
     private void receiveAndSetData() {
@@ -131,6 +173,9 @@ public class ResultActivity extends AppCompatActivity {
             } else if (intent.hasExtra("original_image_uri")) {
                 String uriString = intent.getStringExtra("original_image_uri");
                 Glide.with(this).load(Uri.parse(uriString)).into(ivOriginalImage);
+            } else if (currentRecord != null && currentRecord.getOriginalUrl() != null) {
+                // ⭐️ URL 분석이나 영상 분석의 경우 Firebase에 저장된 URL을 사용
+                Glide.with(this).load(currentRecord.getOriginalUrl()).into(ivOriginalImage);
             }
 
             AnalysisResult result = intent.getParcelableExtra("analysis_result");
@@ -166,6 +211,15 @@ public class ResultActivity extends AppCompatActivity {
             sbOpacitySlider.setProgress(0);
         }
         pbResultGauge.setProgress((int) probability);
+
+        // 가짜(Fake)이면서, SNS URL이 존재할 때만 툴바에 신고하기 버튼 노출
+        Toolbar toolbar = findViewById(R.id.toolbar);
+        MenuItem reportItem = toolbar.getMenu().findItem(R.id.action_report);
+        if (reportItem != null) {
+            String snsUrl = getSnsUrl();
+            boolean hasUrl = (snsUrl != null && !snsUrl.isEmpty());
+            reportItem.setVisible(isFake && hasUrl);
+        }
     }
 
     private void setupSlider() {
@@ -200,9 +254,38 @@ public class ResultActivity extends AppCompatActivity {
                 .show();
     }
 
+    // 실제 플랫폼별 웹페이지 이동 로직
+    private void executeReport() {
+        String snsUrl = getSnsUrl();
+
+        if (snsUrl != null && !snsUrl.isEmpty()) {
+            String reportUrl = null;
+
+            String lowerUrl = snsUrl.toLowerCase();
+
+            if (lowerUrl.contains("youtube.com") || lowerUrl.contains("youtu.be")) {
+                reportUrl = "https://support.google.com/youtube/answer/2802027?hl=ko&co=GENIE.Platform%3DDesktop";
+            } else if (lowerUrl.contains("instagram.com")) {
+                reportUrl = "https://help.instagram.com/?locale=ko_KR";
+            } else if (lowerUrl.contains("tiktok.com")) {
+                reportUrl = "https://www.tiktok.com/safety/ko-kr/reporting/";
+            }
+
+            if (reportUrl != null) {
+                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(reportUrl)));
+            } else {
+                Toast.makeText(this, "지원하지 않는 SNS URL입니다.", Toast.LENGTH_SHORT).show();
+            }
+        } else {
+            Toast.makeText(this, "URL 정보가 없는 데이터입니다.", Toast.LENGTH_SHORT).show();
+        }
+    }
+
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        // 메모리 누수를 막기 위해 액티비티가 종료될 때 둘 다 비워줍니다.
         BitmapHolder.heatmapBitmap = null;
+        BitmapHolder.originalBitmap = null;
     }
 }

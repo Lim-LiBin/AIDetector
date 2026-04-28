@@ -95,6 +95,14 @@ public class HistoryActivity extends AppCompatActivity {
         if (tabHome != null) {
             tabHome.setOnClickListener(v -> finish());
         }
+
+        // [추가] '설정' 탭 클릭 시 SettingsActivity로 이동
+        TextView tabSettings = findViewById(R.id.tabSettings);
+        if (tabSettings != null) {
+            tabSettings.setOnClickListener(v -> {
+                startActivity(new Intent(this, SettingsActivity.class));
+            });
+        }
     }
 
     @Override
@@ -136,6 +144,7 @@ public class HistoryActivity extends AppCompatActivity {
 
                 intent.putExtra("from_history", true);
                 intent.putExtra("record", record);
+                intent.putExtra("snsUrl", record.getSnsUrl());
 
                 // ResultActivity가 이력에서 왔다는 걸 알 수 있게 꼬리표 달기 및 데이터 전송
                 intent.putExtra("from_history", true);

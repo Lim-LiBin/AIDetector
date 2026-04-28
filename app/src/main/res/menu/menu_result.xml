@@ -6,5 +6,12 @@
 
     <item
         android:id="@+id/action_delete"
-        android:title="삭제하기" />
+        android:title="삭제하기"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_report"
+        android:title="신고하기"
+        android:id="@+id/action_contact"
+        android:title="문의하기"
+        app:showAsAction="never" />
 </menu>

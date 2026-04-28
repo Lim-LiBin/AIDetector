@@ -37,6 +37,17 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
+    // packaging 추가
+    packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+        jniLibs {
+            useLegacyPackaging = true
+        }
+        // ✅ TFLite 모델 압축 방지 설정
+        resources.pickFirsts += "**.tflite"
+    }
 }
 
 dependencies {
@@ -52,6 +63,7 @@ dependencies {
     implementation("com.google.firebase:firebase-analytics")
     implementation("com.google.firebase:firebase-storage")
     implementation("com.google.firebase:firebase-firestore")
+    implementation("com.google.firebase:firebase-auth")
 
     // CameraX 라이브러리
     val cameraxVersion = "1.3.0"
@@ -63,6 +75,7 @@ dependencies {
     // 🔥 TensorFlow Lite 라이브러리
     implementation("org.tensorflow:tensorflow-lite-support:0.4.4")
     implementation("org.tensorflow:tensorflow-lite:2.14.0")
+    //implementation("com.google.ai.edge.litert:litert:1.0.1")
 
     // Glide (이미지 로드)
     implementation("com.github.bumptech.glide:glide:4.16.0")
