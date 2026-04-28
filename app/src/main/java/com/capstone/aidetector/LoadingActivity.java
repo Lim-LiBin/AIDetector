@@ -141,7 +141,10 @@ public class LoadingActivity extends AppCompatActivity {
                 savedResult = new AnalysisResult(prob, null);
                 AnalysisResult uploadResult = new AnalysisResult(prob, heatmapBitmap);
 
-                new FirebaseManager().uploadAnalysisResult(uploadResult, frameBitmap, record -> {
+                // MainActivity에서 받아온 snsUrl을 전달
+                String snsUrl = getIntent().getStringExtra("snsUrl");
+
+                new FirebaseManager().uploadAnalysisResult(uploadResult, frameBitmap, snsUrl, record -> {
                     savedRecord = record;
                     checkDataAndMove();
                 });
@@ -183,8 +186,10 @@ public class LoadingActivity extends AppCompatActivity {
             float prob = score * 100f;
             savedResult = new AnalysisResult(prob, null);
 
-            // ⭐️ [수정] 파이어베이스 업로드 시에도 원본 bitmap을 사용합니다.
-            new FirebaseManager().uploadAnalysisResult(new AnalysisResult(prob, heatmapBitmap), bitmap, record -> {
+            // MainActivity에서 받아온 snsUrl을 전달
+            String snsUrl = getIntent().getStringExtra("snsUrl");
+
+            new FirebaseManager().uploadAnalysisResult(new AnalysisResult(prob, heatmapBitmap), scaledBitmap, snsUrl, record -> {
                 savedRecord = record;
                 checkDataAndMove();
             });
@@ -273,7 +278,7 @@ public class LoadingActivity extends AppCompatActivity {
                 if (originalUri == null) {
                     originalUri = getIntent().getStringExtra("image_url");
                 }
-                
+
                 if (originalUri != null) {
                     nextIntent.putExtra("original_image_uri", originalUri);
                 }

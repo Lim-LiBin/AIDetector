@@ -44,10 +44,10 @@ public class ResultActivity extends AppCompatActivity {
 
         initViews();
         setupToolbar();
-        
+
         // currentRecord를 먼저 할당해야 receiveAndSetData에서 활용 가능합니다.
         currentRecord = (HistoryRecord) getIntent().getSerializableExtra("record");
-        
+
         receiveAndSetData();
         setupSlider();
 
@@ -84,12 +84,23 @@ public class ResultActivity extends AppCompatActivity {
             contactItem.setTitle(s);
         }
 
+        // 신고하기 버튼 폰트 설정
+        MenuItem reportItem = menu.findItem(R.id.action_report);
+        if (reportItem != null) {
+            SpannableString s = new SpannableString(reportItem.getTitle());
+            s.setSpan(new ForegroundColorSpan(Color.parseColor("#000000")), 0, s.length(), 0);
+            s.setSpan(new StyleSpan(Typeface.BOLD), 0, s.length(), 0);
+            reportItem.setTitle(s);
+        }
+
         toolbar.setNavigationOnClickListener(v -> finish());
 
         toolbar.setOnMenuItemClickListener(item -> {
             if (item.getItemId() == R.id.action_delete) {
                 showDeleteConfirmDialog();
                 return true;
+            } else if (item.getItemId() == R.id.action_report) {
+                executeReport(); // 팝업 없이 바로 신고 페이지 이동
             }else if (item.getItemId() == R.id.action_contact) {
                 // 문의하기 화면으로 이동
                 Intent intent = new Intent(this, ContactActivity.class);
@@ -98,6 +109,20 @@ public class ResultActivity extends AppCompatActivity {
             }
             return false;
         });
+    }
+
+    // URL을 가져오는 공통 메서드 분리
+    private String getSnsUrl() {
+        if (currentRecord != null && currentRecord.getSnsUrl() != null) {
+            return currentRecord.getSnsUrl();
+        } else {
+            Intent intent = getIntent();
+            if (intent == null) return null;
+            String url = intent.getStringExtra("snsUrl");
+            if (url == null) url = intent.getStringExtra("image_url");
+            if (url == null) url = intent.getStringExtra("video_url");
+            return url;
+        }
     }
 
     private void receiveAndSetData() {
@@ -161,6 +186,15 @@ public class ResultActivity extends AppCompatActivity {
             sbOpacitySlider.setProgress(0);
         }
         pbResultGauge.setProgress((int) probability);
+
+        // 가짜(Fake)이면서, SNS URL이 존재할 때만 툴바에 신고하기 버튼 노출
+        Toolbar toolbar = findViewById(R.id.toolbar);
+        MenuItem reportItem = toolbar.getMenu().findItem(R.id.action_report);
+        if (reportItem != null) {
+            String snsUrl = getSnsUrl();
+            boolean hasUrl = (snsUrl != null && !snsUrl.isEmpty());
+            reportItem.setVisible(isFake && hasUrl);
+        }
     }
 
     private void setupSlider() {
@@ -193,6 +227,33 @@ public class ResultActivity extends AppCompatActivity {
                 })
                 .setNegativeButton("아니요", (dialog, which) -> dialog.dismiss())
                 .show();
+    }
+
+    // 실제 플랫폼별 웹페이지 이동 로직
+    private void executeReport() {
+        String snsUrl = getSnsUrl();
+
+        if (snsUrl != null && !snsUrl.isEmpty()) {
+            String reportUrl = null;
+
+            String lowerUrl = snsUrl.toLowerCase();
+
+            if (lowerUrl.contains("youtube.com") || lowerUrl.contains("youtu.be")) {
+                reportUrl = "https://support.google.com/youtube/answer/2802027?hl=ko&co=GENIE.Platform%3DDesktop";
+            } else if (lowerUrl.contains("instagram.com")) {
+                reportUrl = "https://help.instagram.com/?locale=ko_KR";
+            } else if (lowerUrl.contains("tiktok.com")) {
+                reportUrl = "https://www.tiktok.com/safety/ko-kr/reporting/";
+            }
+
+            if (reportUrl != null) {
+                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(reportUrl)));
+            } else {
+                Toast.makeText(this, "지원하지 않는 SNS URL입니다.", Toast.LENGTH_SHORT).show();
+            }
+        } else {
+            Toast.makeText(this, "URL 정보가 없는 데이터입니다.", Toast.LENGTH_SHORT).show();
+        }
     }
 
     @Override
