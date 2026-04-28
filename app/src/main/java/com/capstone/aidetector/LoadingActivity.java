@@ -189,7 +189,7 @@ public class LoadingActivity extends AppCompatActivity {
             // MainActivity에서 받아온 snsUrl을 전달
             String snsUrl = getIntent().getStringExtra("snsUrl");
 
-            new FirebaseManager().uploadAnalysisResult(new AnalysisResult(prob, heatmapBitmap), scaledBitmap, snsUrl, record -> {
+            new FirebaseManager().uploadAnalysisResult(new AnalysisResult(prob, heatmapBitmap), bitmap, snsUrl, record -> {
                 savedRecord = record;
                 checkDataAndMove();
             });
@@ -265,20 +265,36 @@ public class LoadingActivity extends AppCompatActivity {
         step3.setBackgroundTintList(ColorStateList.valueOf(Color.parseColor(c3)));
     }
 
+    // LoadingActivity.java 의 checkDataAndMove 메서드 부분 교체
     private void checkDataAndMove() {
+        // 애니메이션이 끝났고, 데이터가 준비되었을 때만 실행
         if (isAnimationFinished && savedRecord != null) {
             new Handler(Looper.getMainLooper()).post(() -> {
                 Intent nextIntent = new Intent(LoadingActivity.this, ResultActivity.class);
 
+                // 1. 분석 결과 데이터 전달
                 nextIntent.putExtra("record", savedRecord);
                 nextIntent.putExtra("analysis_result", savedResult);
 
-                // ⭐️ 이제 용량 큰 byte[]는 아예 보내지 않습니다.
-                String originalUri = getIntent().getStringExtra("original_image_uri");
-                if (originalUri == null) {
-                    originalUri = getIntent().getStringExtra("image_url");
+                // 2. [가장 중요] SNS URL 찾기 및 전달
+                // MainActivity에서 넘겨준 모든 가능성 있는 키값을 체크합니다.
+                String snsUrl = getIntent().getStringExtra("snsUrl");
+                if (snsUrl == null) snsUrl = getIntent().getStringExtra("image_url");
+                if (snsUrl == null) snsUrl = getIntent().getStringExtra("video_url");
+
+                // 만약 savedRecord(Firebase에서 온 데이터)에 이미 URL이 있다면 그것을 우선 사용
+                if (snsUrl == null && savedRecord.getSnsUrl() != null) {
+                    snsUrl = savedRecord.getSnsUrl();
                 }
 
+                if (snsUrl != null) {
+                    nextIntent.putExtra("snsUrl", snsUrl);
+                    Log.d("DEBUG_LOADING", "결과 화면으로 보낼 URL: " + snsUrl);
+                }
+
+                // 3. 이미지 URI 전달
+                String originalUri = getIntent().getStringExtra("original_image_uri");
+                if (originalUri == null) originalUri = getIntent().getStringExtra("image_url");
                 if (originalUri != null) {
                     nextIntent.putExtra("original_image_uri", originalUri);
                 }

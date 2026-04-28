@@ -138,16 +138,22 @@ public class ResultActivity extends AppCompatActivity {
 
     // URL을 가져오는 공통 메서드 분리
     private String getSnsUrl() {
-        if (currentRecord != null && currentRecord.getSnsUrl() != null) {
-            return currentRecord.getSnsUrl();
-        } else {
+        String url = null;
+
+        // 1. Firebase에서 가져온 레코드에 URL이 있는지 확인
+        if (currentRecord != null && currentRecord.getSnsUrl() != null && !currentRecord.getSnsUrl().isEmpty()) {
+            url = currentRecord.getSnsUrl();
+        }
+
+        // 2. 레코드에 없다면 전달받은 Intent에서 직접 확인
+        if (url == null || url.isEmpty()) {
             Intent intent = getIntent();
-            if (intent == null) return null;
-            String url = intent.getStringExtra("snsUrl");
+            url = intent.getStringExtra("snsUrl");
             if (url == null) url = intent.getStringExtra("image_url");
             if (url == null) url = intent.getStringExtra("video_url");
-            return url;
         }
+
+        return url;
     }
 
     private void receiveAndSetData() {
@@ -193,7 +199,6 @@ public class ResultActivity extends AppCompatActivity {
         boolean isFake = "Fake".equalsIgnoreCase(result) || probability >= 50.0f;
 
         if (isFake) {
-            // [공유 기능 추가] shareSummary 변수 업데이트
             shareSummary = String.format("판별 결과 : 거짓 (%.1f%%)", probability);
             tvResultText.setText(shareSummary);
             tvResultText.setTextColor(Color.parseColor("#FF5E62"));
@@ -201,7 +206,6 @@ public class ResultActivity extends AppCompatActivity {
             ivHeatmapImage.setVisibility(View.VISIBLE);
             sbOpacitySlider.setEnabled(true);
         } else {
-            // [공유 기능 추가] shareSummary 변수 업데이트
             shareSummary = String.format("판별 결과 : 참 (%.1f%%)", probability);
             tvResultText.setText(shareSummary);
             tvResultText.setTextColor(Color.parseColor("#00D2FF"));
@@ -212,12 +216,19 @@ public class ResultActivity extends AppCompatActivity {
         }
         pbResultGauge.setProgress((int) probability);
 
-        // 가짜(Fake)이면서, SNS URL이 존재할 때만 툴바에 신고하기 버튼 노출
+        // --- 신고하기 버튼 노출 제어 ---
         Toolbar toolbar = findViewById(R.id.toolbar);
-        MenuItem reportItem = toolbar.getMenu().findItem(R.id.action_report);
+        Menu menu = toolbar.getMenu();
+        MenuItem reportItem = menu.findItem(R.id.action_report);
+
         if (reportItem != null) {
             String snsUrl = getSnsUrl();
             boolean hasUrl = (snsUrl != null && !snsUrl.isEmpty());
+
+            // 로그로 확인 (안드로이드 스튜디오 Logcat에서 DEBUG_CHECK 필터로 확인)
+            Log.d("DEBUG_CHECK", "isFake: " + isFake + ", hasUrl: " + hasUrl + ", URL: " + snsUrl);
+
+            // 거짓이고 URL이 있을 때만 표시
             reportItem.setVisible(isFake && hasUrl);
         }
     }
