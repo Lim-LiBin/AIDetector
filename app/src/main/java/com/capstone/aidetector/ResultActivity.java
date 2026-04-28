@@ -2,6 +2,8 @@ package com.capstone.aidetector;
 
 import android.content.Intent;
 import android.content.res.ColorStateList;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.net.Uri;
@@ -22,8 +24,6 @@ import android.widget.Toast;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
-import android.graphics.Bitmap;  // ← 추가!
-import android.graphics.BitmapFactory;  // ← 추가!
 
 import com.bumptech.glide.Glide;
 
@@ -37,6 +37,9 @@ public class ResultActivity extends AppCompatActivity {
     private FirebaseManager firebaseManager = new FirebaseManager();
     private HistoryRecord currentRecord;
 
+    // [공유 기능 추가] 결과 텍스트를 저장할 변수
+    private String shareSummary = "";
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -47,11 +50,9 @@ public class ResultActivity extends AppCompatActivity {
         receiveAndSetData();
         setupSlider();
 
-        currentRecord = (HistoryRecord) getIntent().getSerializableExtra("record");
-
-        if (currentRecord == null) {
-            Log.d("ResultActivity", "방금 분석한 결과입니다. (이력 데이터 없음)");
-            return;
+        // currentRecord 할당 위치 조정 (데이터 로딩 전/후 상관없이 안전하게 체크)
+        if (getIntent().hasExtra("record")) {
+            currentRecord = (HistoryRecord) getIntent().getSerializableExtra("record");
         }
     }
 
@@ -65,22 +66,41 @@ public class ResultActivity extends AppCompatActivity {
 
     private void setupToolbar() {
         Toolbar toolbar = findViewById(R.id.toolbar);
-        toolbar.inflateMenu(R.menu.menu_result); // 만들어둔 메뉴 파일 연결
+        toolbar.inflateMenu(R.menu.menu_result);
 
-        // [수정된 부분] 툴바 안에서 직접 메뉴 아이템을 찾아 글씨 속성 변경
         Menu menu = toolbar.getMenu();
+
+        // [공유 기능 추가] 공유 메뉴 아이템 스타일 설정
+        MenuItem shareItem = menu.findItem(R.id.action_share);
+        if (shareItem != null) {
+            SpannableString s = new SpannableString(shareItem.getTitle());
+            s.setSpan(new ForegroundColorSpan(Color.parseColor("#000000")), 0, s.length(), 0);
+            s.setSpan(new StyleSpan(Typeface.BOLD), 0, s.length(), 0);
+            shareItem.setTitle(s);
+        }
+
         MenuItem deleteItem = menu.findItem(R.id.action_delete);
         if (deleteItem != null) {
             SpannableString s = new SpannableString(deleteItem.getTitle());
-            s.setSpan(new ForegroundColorSpan(Color.parseColor("#000000")), 0, s.length(), 0); // 검은색
-            s.setSpan(new StyleSpan(Typeface.BOLD), 0, s.length(), 0); // 굵은 글씨
+            s.setSpan(new ForegroundColorSpan(Color.parseColor("#000000")), 0, s.length(), 0);
+            s.setSpan(new StyleSpan(Typeface.BOLD), 0, s.length(), 0);
             deleteItem.setTitle(s);
         }
 
         toolbar.setNavigationOnClickListener(v -> finish());
 
+        // [수정된 부분] 공유하기 메뉴 클릭 리스너 연결
         toolbar.setOnMenuItemClickListener(item -> {
-            if (item.getItemId() == R.id.action_delete) {
+            int id = item.getItemId();
+            if (id == R.id.action_share) {
+                // 🚀 공유 로직 실행
+                Intent sendIntent = new Intent();
+                sendIntent.setAction(Intent.ACTION_SEND);
+                sendIntent.putExtra(Intent.EXTRA_TEXT, "[D-Tect 분석 결과]\n" + shareSummary);
+                sendIntent.setType("text/plain");
+                startActivity(Intent.createChooser(sendIntent, "결과 공유하기"));
+                return true;
+            } else if (id == R.id.action_delete) {
                 showDeleteConfirmDialog();
                 return true;
             }
@@ -95,7 +115,6 @@ public class ResultActivity extends AppCompatActivity {
         boolean fromHistory = intent.getBooleanExtra("from_history", false);
 
         if (fromHistory) {
-            // --- 이력에서 온 경우 (기존 코드 유지) ---
             currentRecord = (HistoryRecord) intent.getSerializableExtra("record");
             if (currentRecord != null) {
                 updateUIByResult(currentRecord.getResult(), currentRecord.getProbability());
@@ -103,9 +122,6 @@ public class ResultActivity extends AppCompatActivity {
                 Glide.with(this).load(currentRecord.getHeatmapUrl()).into(ivHeatmapImage);
             }
         } else {
-            // --- 방금 막 분석을 완료하고 로딩 화면을 거쳐 넘어온 경우 ---
-
-            // 1. 원본 이미지 표시 (바이트 배열 우선 확인)
             if (intent.hasExtra("original_image_bytes")) {
                 byte[] byteArray = intent.getByteArrayExtra("original_image_bytes");
                 if (byteArray != null) {
@@ -117,12 +133,10 @@ public class ResultActivity extends AppCompatActivity {
                 Glide.with(this).load(Uri.parse(uriString)).into(ivOriginalImage);
             }
 
-            // 2. 히트맵 및 결과 텍스트 표시
             AnalysisResult result = intent.getParcelableExtra("analysis_result");
             if (result != null) {
                 updateUIByResult(result.probability >= 50.0f ? "Fake" : "Real", result.probability);
 
-                // 로딩 액티비티에서 보관소에 넣어둔 히트맵 비트맵을 꺼내서 표시
                 if (BitmapHolder.heatmapBitmap != null) {
                     ivHeatmapImage.setImageBitmap(BitmapHolder.heatmapBitmap);
                 }
@@ -134,14 +148,18 @@ public class ResultActivity extends AppCompatActivity {
         boolean isFake = "Fake".equalsIgnoreCase(result) || probability >= 50.0f;
 
         if (isFake) {
-            tvResultText.setText(String.format("판별 결과 : 거짓 (%.1f%%)", probability));
-            tvResultText.setTextColor(Color.parseColor("#FF5E62")); // 네온 핑크
+            // [공유 기능 추가] shareSummary 변수 업데이트
+            shareSummary = String.format("판별 결과 : 거짓 (%.1f%%)", probability);
+            tvResultText.setText(shareSummary);
+            tvResultText.setTextColor(Color.parseColor("#FF5E62"));
             pbResultGauge.setProgressTintList(ColorStateList.valueOf(Color.parseColor("#FF5E62")));
             ivHeatmapImage.setVisibility(View.VISIBLE);
             sbOpacitySlider.setEnabled(true);
         } else {
-            tvResultText.setText(String.format("판별 결과 : 참 (%.1f%%)", probability));
-            tvResultText.setTextColor(Color.parseColor("#00D2FF")); // 네온 시안
+            // [공유 기능 추가] shareSummary 변수 업데이트
+            shareSummary = String.format("판별 결과 : 참 (%.1f%%)", probability);
+            tvResultText.setText(shareSummary);
+            tvResultText.setTextColor(Color.parseColor("#00D2FF"));
             pbResultGauge.setProgressTintList(ColorStateList.valueOf(Color.parseColor("#00D2FF")));
             ivHeatmapImage.setVisibility(View.INVISIBLE);
             sbOpacitySlider.setEnabled(false);
@@ -163,6 +181,7 @@ public class ResultActivity extends AppCompatActivity {
             public void onStopTrackingTouch(SeekBar seekBar) {}
         });
     }
+
     private void showDeleteConfirmDialog() {
         if (currentRecord == null) {
             Toast.makeText(this, "이력(History) 화면에서 들어와야 삭제가 가능합니다.", Toast.LENGTH_SHORT).show();
@@ -173,16 +192,14 @@ public class ResultActivity extends AppCompatActivity {
                 .setMessage("이 기록을 삭제하시겠습니까?")
                 .setPositiveButton("네", (dialog, which) -> {
                     firebaseManager.deleteHistory(currentRecord, () -> {
-                        // 삭제가 성공적으로 끝난 후 실행될 코드
                         Toast.makeText(ResultActivity.this, "기록이 삭제되었습니다.", Toast.LENGTH_SHORT).show();
-
-                        // 삭제되었으니 결과 화면을 닫고 이전 화면(이력 리스트)으로 돌아갑니다.
                         finish();
                     });
                 })
                 .setNegativeButton("아니요", (dialog, which) -> dialog.dismiss())
                 .show();
     }
+
     @Override
     protected void onDestroy() {
         super.onDestroy();
