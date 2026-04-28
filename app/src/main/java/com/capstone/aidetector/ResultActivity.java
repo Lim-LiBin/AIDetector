@@ -76,6 +76,13 @@ public class ResultActivity extends AppCompatActivity {
             s.setSpan(new StyleSpan(Typeface.BOLD), 0, s.length(), 0);
             deleteItem.setTitle(s);
         }
+        MenuItem contactItem = menu.findItem(R.id.action_contact);
+        if (contactItem != null) {
+            SpannableString s = new SpannableString(contactItem.getTitle());
+            s.setSpan(new ForegroundColorSpan(Color.parseColor("#000000")), 0, s.length(), 0);
+            s.setSpan(new StyleSpan(Typeface.BOLD), 0, s.length(), 0);
+            contactItem.setTitle(s);
+        }
 
         // 신고하기 버튼 폰트 설정
         MenuItem reportItem = menu.findItem(R.id.action_report);
@@ -94,6 +101,10 @@ public class ResultActivity extends AppCompatActivity {
                 return true;
             } else if (item.getItemId() == R.id.action_report) {
                 executeReport(); // 팝업 없이 바로 신고 페이지 이동
+            }else if (item.getItemId() == R.id.action_contact) {
+                // 문의하기 화면으로 이동
+                Intent intent = new Intent(this, ContactActivity.class);
+                startActivity(intent);
                 return true;
             }
             return false;
