@@ -159,24 +159,20 @@ public class LoadingActivity extends AppCompatActivity {
         }
 
         try {
-            // 원본 크기 저장
+            // 원본 크기 저장 (히트맵 생성용)
             int originalWidth = bitmap.getWidth();
             int originalHeight = bitmap.getHeight();
 
-            // 메모리 부족 방지를 위해 리사이징
-            Bitmap scaledBitmap = scaleBitmapIfNeeded(bitmap);
-            // ⭐️ 분석에 쓰인 최적화된 이미지를 다시 홀더에 넣어 다음 화면에서 쓰게 함
-            BitmapHolder.originalBitmap = scaledBitmap;
-            
+            // ⭐️ [수정] 이중 리사이징 제거: 1024px로 줄이지 않고 원본 그대로 분석에 사용합니다.
+            // AiProcessor 내부의 ResizeOp(224, 224)만 거치게 되어 화질 손실이 최소화됩니다.
             AiProcessor aiProcessor = new AiProcessor(this);
-            TensorImage processedImage = aiProcessor.processImage(scaledBitmap);
+            TensorImage processedImage = aiProcessor.processImage(bitmap); // bitmap 직접 사용
             Map<String, Object> results = aiProcessor.runInference(processedImage);
 
             float score = (float) results.get("score");
             float[][] heatmapMatrix = (float[][]) results.get("heatmap");
 
             HeatmapProcessor heatmapProcessor = new HeatmapProcessor();
-            // 원본 크기에 맞춰 히트맵 생성
             Bitmap heatmapBitmap = heatmapProcessor.createHeatmapImage(
                     heatmapMatrix,
                     originalWidth,
@@ -187,7 +183,8 @@ public class LoadingActivity extends AppCompatActivity {
             float prob = score * 100f;
             savedResult = new AnalysisResult(prob, null);
 
-            new FirebaseManager().uploadAnalysisResult(new AnalysisResult(prob, heatmapBitmap), scaledBitmap, record -> {
+            // ⭐️ [수정] 파이어베이스 업로드 시에도 원본 bitmap을 사용합니다.
+            new FirebaseManager().uploadAnalysisResult(new AnalysisResult(prob, heatmapBitmap), bitmap, record -> {
                 savedRecord = record;
                 checkDataAndMove();
             });
