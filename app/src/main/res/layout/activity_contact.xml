@@ -1,47 +1,97 @@
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="20dp"
-    android:background="#0F0B21"> <TextView
-    android:layout_width="wrap_content"
-    android:layout_height="wrap_content"
-    android:text="문의하기"
-    android:textColor="#FFFFFF"
-    android:textSize="24sp"
-    android:textStyle="bold"
-    android:layout_marginBottom="30dp" />
+    android:background="#110E1B"> <!-- 판별 결과 배경색과 통일 -->
 
-    <EditText
-        android:id="@+id/et_contact_title"
+    <!-- 상단바 영역: 판별 결과 화면과 높이/위치 맞춤 -->
+    <RelativeLayout
+        android:id="@+id/topBar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:hint="제목을 입력하세요"
-        android:textColorHint="#888888"
-        android:textColor="#FFFFFF"
-        android:backgroundTint="#00D2FF"
-        android:padding="12dp" />
+        android:layout_height="?attr/actionBarSize"
+        android:layout_marginTop="40dp"
+        app:layout_constraintTop_toTopOf="parent">
 
-    <EditText
-        android:id="@+id/et_contact_body"
+        <!-- 뒤로가기 버튼 -->
+        <ImageButton
+            android:id="@+id/btn_back"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_centerVertical="true"
+            android:layout_marginStart="8dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_back"
+            app:tint="#FFFFFF" />
+
+        <!-- 중앙 제목 -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerInParent="true"
+            android:text="문의하기"
+            android:textColor="#00D2FF"
+            android:textSize="22sp"
+            android:textStyle="bold" />
+    </RelativeLayout>
+
+    <View
+        android:id="@+id/divider"
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#5A4FCF"
+        app:layout_constraintTop_toBottomOf="@id/topBar" />
+
+    <!-- 입력 영역 -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1"
-        android:hint="문의 내용을 상세히 적어주세요"
-        android:textColorHint="#888888"
-        android:textColor="#FFFFFF"
-        android:gravity="top"
-        android:backgroundTint="#00D2FF"
-        android:layout_marginTop="20dp"
-        android:padding="12dp" />
+        android:orientation="vertical"
+        android:padding="24dp"
+        app:layout_constraintTop_toBottomOf="@id/divider"
+        app:layout_constraintBottom_toTopOf="@id/btn_contact_send">
 
+        <!-- 1. 제목 입력칸 (박스 형태) -->
+        <EditText
+            android:id="@+id/et_contact_title"
+            android:layout_width="match_parent"
+            android:layout_height="60dp"
+            android:background="#1E1838"
+            android:hint="제목을 입력하세요"
+            android:textColorHint="#888888"
+            android:textColor="#FFFFFF"
+            android:padding="16dp"
+            android:textSize="16sp" />
+
+        <!-- 2. 본문 입력칸 (큰 박스 형태) -->
+        <EditText
+            android:id="@+id/et_contact_body"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:background="#1E1838"
+            android:hint="문의 내용을 상세히 적어주세요"
+            android:textColorHint="#888888"
+            android:textColor="#FFFFFF"
+            android:gravity="top"
+            android:layout_marginTop="20dp"
+            android:padding="16dp"
+            android:textSize="15sp" />
+
+    </LinearLayout>
+
+    <!-- 하단 전송 버튼 -->
     <Button
         android:id="@+id/btn_contact_send"
         android:layout_width="match_parent"
         android:layout_height="60dp"
+        android:layout_margin="24dp"
         android:text="전송하기"
         android:textStyle="bold"
         android:backgroundTint="#00D2FF"
         android:textColor="#000000"
-        android:layout_marginTop="20dp" />
-</LinearLayout>
+        app:cornerRadius="25dp"
+        app:layout_constraintBottom_toBottomOf="parent" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>
