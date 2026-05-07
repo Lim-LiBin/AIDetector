@@ -7,4 +7,7 @@ import retrofit2.http.POST;
 public interface PostService {
     @POST("analyze_video")
     Call<VideoAnalysisResponse> analyzeVideo(@Body VideoAnalysisRequest request);
+
+    @POST("check_url")
+    Call<UrlCheckResponse> checkUrl(@Body UrlCheckRequest request);
 }

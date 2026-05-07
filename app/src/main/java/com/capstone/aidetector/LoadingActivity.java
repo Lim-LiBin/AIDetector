@@ -68,9 +68,11 @@ public class LoadingActivity extends AppCompatActivity {
             savedRecord = (HistoryRecord) getIntent().getSerializableExtra("record");
             savedResult = (AnalysisResult) getIntent().getParcelableExtra("analysis_result");
         } else if (isVideoMode) {
-            performVideoAnalysis(getIntent().getStringExtra("video_url"));
+            String videoUrl = getIntent().getStringExtra("video_url");
+            checkUrlThenProceed(videoUrl, () -> performVideoAnalysis(videoUrl));
         } else if (isFromUrl) {
-            loadAndAnalyzeUrlImage(getIntent().getStringExtra("image_url"));
+            String imageUrl = getIntent().getStringExtra("image_url");
+            checkUrlThenProceed(imageUrl, () -> loadAndAnalyzeUrlImage(imageUrl));
         } else {
             // ⭐️ [수정] Intent 용량 제한 회피를 위해 BitmapHolder에서 직접 가져옵니다.
             Bitmap bitmap = BitmapHolder.originalBitmap;
@@ -80,6 +82,44 @@ public class LoadingActivity extends AppCompatActivity {
                 finishWithError("분석할 이미지가 없습니다.");
             }
         }
+    }
+
+    private void checkUrlThenProceed(String url, Runnable onSafe) {
+        Retrofit retrofit = new Retrofit.Builder()
+                .baseUrl(ServerConfig.getBaseUrl())
+                .addConverterFactory(GsonConverterFactory.create())
+                .build();
+
+        PostService service = retrofit.create(PostService.class);
+        service.checkUrl(new UrlCheckRequest(url)).enqueue(new Callback<UrlCheckResponse>() {
+            @Override
+            public void onResponse(Call<UrlCheckResponse> call, Response<UrlCheckResponse> response) {
+                if (response.isSuccessful() && response.body() != null) {
+                    UrlCheckResponse result = response.body();
+                    if (result.isSuspicious()) {
+                        runOnUiThread(() -> UrlCheckDialog.showWarning(
+                                LoadingActivity.this, result,
+                                new UrlCheckDialog.OnUserDecision() {
+                                    @Override
+                                    public void onProceed() { onSafe.run(); }
+                                    @Override
+                                    public void onBlock() { finishWithError("위험한 링크로 판단되어 접속이 차단되었습니다."); }
+                                }
+                        ));
+                    } else {
+                        onSafe.run();
+                    }
+                } else {
+                    onSafe.run();
+                }
+            }
+
+            @Override
+            public void onFailure(Call<UrlCheckResponse> call, Throwable t) {
+                Log.w(TAG, "URL 검사 실패, 분석 계속 진행", t);
+                onSafe.run();
+            }
+        });
     }
 
     private void performVideoAnalysis(String url) {
