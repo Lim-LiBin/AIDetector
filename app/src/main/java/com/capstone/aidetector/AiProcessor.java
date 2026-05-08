@@ -62,6 +62,10 @@ public class AiProcessor {
      */
     // AiProcessor.java 내 processImage 수정
     public TensorImage processImage(Bitmap bitmap) {
+        Bitmap argbBitmap = bitmap.getConfig() == Bitmap.Config.ARGB_8888
+                ? bitmap
+                : bitmap.copy(Bitmap.Config.ARGB_8888, true);
+
         ImageProcessor imageProcessor = new ImageProcessor.Builder()
                 // 1. 먼저 리사이징 (PIL과 최대한 비슷한 알고리즘)
                 .add(new ResizeOp(224, 224, ResizeOp.ResizeMethod.BILINEAR))
@@ -71,7 +75,7 @@ public class AiProcessor {
 
         TensorImage tensorImage = new TensorImage(DataType.FLOAT32);
         // ⭐️ Bitmap을 로드할 때 ARGB_8888 형식을 유지하는지 확인
-        tensorImage.load(bitmap);
+        tensorImage.load(argbBitmap);
         return imageProcessor.process(tensorImage);
     }
 
