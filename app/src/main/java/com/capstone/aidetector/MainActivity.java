@@ -90,7 +90,7 @@ public class MainActivity extends AppCompatActivity {
                     if (uri != null) {
                         processGalleryMedia(uri);
                         // 갤러리 이미지 로드 후 튜토리얼 실행
-                        showActionTutorial();
+                        //showActionTutorial();
                     }
                 }
         );
@@ -509,10 +509,11 @@ public class MainActivity extends AppCompatActivity {
     // │ [추가] 갤러리에서 가져온 영상 분석을 위한 LoadingActivity 호출    │
     // └────────────────────────────────────────────────────────┘
     private void runVideoAnalysisFromGallery() {
+        isAnalyzing = true;
         Intent intent = new Intent(MainActivity.this, LoadingActivity.class);
         intent.putExtra("video_url", currentImageUri.toString());
         intent.putExtra("is_video_mode", true);
-        intent.putExtra("is_from_gallery", true);
+        intent.putExtra("is_local_video", true);
         startActivity(intent);
     }
 
