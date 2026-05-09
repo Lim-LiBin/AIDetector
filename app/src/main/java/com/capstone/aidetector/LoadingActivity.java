@@ -85,15 +85,21 @@ public class LoadingActivity extends AppCompatActivity {
     }
 
     private void checkUrlThenProceed(String url, Runnable onSafe) {
+        Log.d(TAG, "URL 검사 시작: " + url);
+
         Retrofit retrofit = new Retrofit.Builder()
                 .baseUrl(ServerConfig.getBaseUrl())
                 .addConverterFactory(GsonConverterFactory.create())
                 .build();
 
         PostService service = retrofit.create(PostService.class);
+        Log.d(TAG, "서버 요청 전송 시도 중...");
+
         service.checkUrl(new UrlCheckRequest(url)).enqueue(new Callback<UrlCheckResponse>() {
             @Override
             public void onResponse(Call<UrlCheckResponse> call, Response<UrlCheckResponse> response) {
+                Log.d(TAG, "onResponse 진입: " + response.code());
+
                 if (response.isSuccessful() && response.body() != null) {
                     UrlCheckResponse result = response.body();
                     if (result.isSuspicious()) {
@@ -117,6 +123,7 @@ public class LoadingActivity extends AppCompatActivity {
             @Override
             public void onFailure(Call<UrlCheckResponse> call, Throwable t) {
                 Log.w(TAG, "URL 검사 실패, 분석 계속 진행", t);
+                Log.e(TAG, "checkUrl onFailure 진입!", t);
                 onSafe.run();
             }
         });
