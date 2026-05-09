@@ -25,6 +25,14 @@ import com.google.firebase.storage.FirebaseStorage;
 
 import java.util.regex.Pattern;
 
+import com.skydoves.balloon.Balloon;
+import com.skydoves.balloon.BalloonAnimation;
+import com.skydoves.balloon.BalloonSizeSpec;
+import com.skydoves.balloon.overlay.BalloonOverlayRect;
+import android.content.Context;
+import android.content.SharedPreferences;
+import android.view.View;
+
 public class SettingsActivity extends AppCompatActivity {
 
     private static final String TAG = "SettingsActivity";
@@ -59,6 +67,8 @@ public class SettingsActivity extends AppCompatActivity {
         initViews();
         setupListeners();
         loadUserInfo();
+
+        checkAndRunTutorial();
     }
 
     // XML에 정의된 뷰들을 변수와 연결
@@ -120,6 +130,10 @@ public class SettingsActivity extends AppCompatActivity {
         findViewById(R.id.nav_history).setOnClickListener(v -> {
             startActivity(new Intent(this, HistoryActivity.class));
             finish();
+        });
+        findViewById(R.id.tv_inquiry_history).setOnClickListener(v -> {
+            Intent intent = new Intent(this, InquiryHistoryActivity.class);
+            startActivity(intent);
         });
     }
 
@@ -275,5 +289,45 @@ public class SettingsActivity extends AppCompatActivity {
                 }).addOnFailureListener(this::handleAuthError); // 오랫동안 접속한 상태면 재로그인 요구
             });
         });
+    }
+
+    private void checkAndRunTutorial() {
+        SharedPreferences prefs = getSharedPreferences("TutorialPrefs", Context.MODE_PRIVATE);
+        boolean needsTutorial = prefs.getBoolean("NEEDS_SETTINGS_TUTORIAL", false);
+
+        if (needsTutorial) {
+            // 화면이 다 그려진 후 말풍선 띄우기
+            getWindow().getDecorView().post(() -> showSettingsTutorial(prefs));
+        }
+    }
+
+    private void showSettingsTutorial(SharedPreferences prefs) {
+        View targetView = getWindow().getDecorView();
+
+        Balloon balloon = new Balloon.Builder(this)
+                .setWidthRatio(0.85f) // ⭐️ 0.7f에서 0.85f로 넓혀서 글씨가 들어갈 공간 확보!
+                .setHeight(BalloonSizeSpec.WRAP)
+                .setText("설정에서는 내 정보를\n수정할 수 있습니다.\n\n이것으로 튜토리얼을 마칩니다!")
+                .setTextColorResource(android.R.color.black)
+                .setBackgroundColor(android.graphics.Color.parseColor("#FFFF00"))
+                .setCornerRadius(8f)
+                .setArrowSize(0)
+                .setPadding(16)
+                .setTextSize(20f)
+                .setIsVisibleOverlay(true)
+                .setOverlayColor(android.graphics.Color.parseColor("#E6000000"))
+                .setOverlayShape(BalloonOverlayRect.INSTANCE)
+                .setBalloonAnimation(BalloonAnimation.FADE)
+                .setLifecycleOwner(this)
+                .setDismissWhenClicked(true)
+                .build();
+
+        balloon.setOnBalloonDismissListener(() -> {
+            prefs.edit()
+                    .putBoolean("NEEDS_SETTINGS_TUTORIAL", false)
+                    .apply();
+        });
+
+        balloon.showAtCenter(targetView);
     }
 }

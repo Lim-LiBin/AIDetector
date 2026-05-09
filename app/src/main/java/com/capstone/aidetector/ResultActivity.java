@@ -214,33 +214,54 @@ public class ResultActivity extends AppCompatActivity {
     }
 
     private void updateUIByResult(String result, float probability) {
-        boolean isFake = "Fake".equalsIgnoreCase(result) || probability >= 50.0f;
-
-        if (isFake) {
-            shareSummary = String.format("판별 결과 : 거짓 (%.1f%%)", probability);
+        //확률 구간별 상태 판정 및 UI 설정
+        if (probability <= 35.0f) {
+            //[안전] 0 ~ 35%
+            shareSummary = String.format("%.1f%%로 진짜 콘텐츠로 확인되었습니다.", probability);
             tvResultText.setText(shareSummary);
-            tvResultText.setTextColor(Color.parseColor("#FF5E62"));
-            pbResultGauge.setProgressTintList(ColorStateList.valueOf(Color.parseColor("#FF5E62")));
-            ivHeatmapImage.setVisibility(View.VISIBLE);
-            sbOpacitySlider.setEnabled(true);
-        } else {
-            shareSummary = String.format("판별 결과 : 참 (%.1f%%)", probability);
-            tvResultText.setText(shareSummary);
-            tvResultText.setTextColor(Color.parseColor("#00D2FF"));
+            tvResultText.setTextColor(Color.parseColor("#00D2FF")); // 블루
             pbResultGauge.setProgressTintList(ColorStateList.valueOf(Color.parseColor("#00D2FF")));
             ivHeatmapImage.setVisibility(View.INVISIBLE);
             sbOpacitySlider.setEnabled(false);
             sbOpacitySlider.setProgress(0);
+        } else if (probability <= 65.0f) {
+            //[주의] 36 ~ 65%
+            shareSummary = String.format("%.1f%%로 조작 가능성이 존재합니다.", probability);
+            tvResultText.setText(shareSummary);
+            tvResultText.setTextColor(Color.parseColor("#FFBB00")); // 옐로우
+            pbResultGauge.setProgressTintList(ColorStateList.valueOf(Color.parseColor("#FFBB00")));
+            ivHeatmapImage.setVisibility(View.VISIBLE);
+            sbOpacitySlider.setEnabled(true);
+        } else {
+            //[위험] 66 ~ 100%
+            shareSummary = String.format("%.1f%%로 AI 생성 콘텐츠로 의심됩니다.", probability);
+            tvResultText.setText(shareSummary);
+            tvResultText.setTextColor(Color.parseColor("#FF5E62")); // 레드
+            pbResultGauge.setProgressTintList(ColorStateList.valueOf(Color.parseColor("#FF5E62"))); // 색상 수정 완료
+            ivHeatmapImage.setVisibility(View.VISIBLE);
+            sbOpacitySlider.setEnabled(true);
         }
+
+        //게이지 값 설정
         pbResultGauge.setProgress((int) probability);
 
+        //신고하기 버튼
         Toolbar toolbar = findViewById(R.id.toolbar);
         Menu menu = toolbar.getMenu();
         MenuItem reportItem = menu.findItem(R.id.action_report);
 
         if (reportItem != null) {
             String snsUrl = getSnsUrl();
-            reportItem.setVisible(isFake && (snsUrl != null && !snsUrl.isEmpty()));
+            boolean hasUrl = (snsUrl != null && !snsUrl.isEmpty());
+
+            //35% 초과일 때 조작으로 간주하여 신고 버튼 노출
+            boolean isSuspicious = (probability > 35.0f);
+
+            //로그
+            Log.d("DEBUG_CHECK", "Probability: " + probability + ", hasUrl: " + hasUrl + ", URL: " + snsUrl);
+
+            //조작 의심 단계이고 URL 정보가 있을 때만 신고 버튼 표시
+            reportItem.setVisible(isSuspicious && hasUrl);
         }
     }
 
