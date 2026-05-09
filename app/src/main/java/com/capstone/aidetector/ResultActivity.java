@@ -4,6 +4,7 @@ import android.content.Intent;
 import android.content.res.ColorStateList;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.net.Uri;
@@ -15,6 +16,7 @@ import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
+import android.widget.FrameLayout; // ★ 추가
 import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.SeekBar;
@@ -24,8 +26,13 @@ import android.widget.Toast;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
+import androidx.core.content.FileProvider;
 
 import com.bumptech.glide.Glide;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
 
 public class ResultActivity extends AppCompatActivity {
 
@@ -33,11 +40,11 @@ public class ResultActivity extends AppCompatActivity {
     private ProgressBar pbResultGauge;
     private ImageView ivOriginalImage;
     private ImageView ivHeatmapImage;
+    private FrameLayout ivContainer; // ★ XML의 iv_container를 받기 위한 변수
     private SeekBar sbOpacitySlider;
     private FirebaseManager firebaseManager = new FirebaseManager();
     private HistoryRecord currentRecord;
 
-    // [공유 기능 추가] 결과 텍스트를 저장할 변수
     private String shareSummary = "";
 
     @Override
@@ -48,7 +55,6 @@ public class ResultActivity extends AppCompatActivity {
         initViews();
         setupToolbar();
 
-        // currentRecord 할당 위치 조정 (데이터 로딩 전/후 상관없이 안전하게 체크)
         if (getIntent().hasExtra("record")) {
             currentRecord = (HistoryRecord) getIntent().getSerializableExtra("record");
         }
@@ -66,6 +72,7 @@ public class ResultActivity extends AppCompatActivity {
         pbResultGauge = findViewById(R.id.pb_result_gauge);
         ivOriginalImage = findViewById(R.id.iv_original_image);
         ivHeatmapImage = findViewById(R.id.iv_heatmap_image);
+        ivContainer = findViewById(R.id.iv_container); // ★ XML의 iv_container 연결
         sbOpacitySlider = findViewById(R.id.sb_opacity_slider);
     }
 
@@ -75,59 +82,26 @@ public class ResultActivity extends AppCompatActivity {
 
         Menu menu = toolbar.getMenu();
 
-        // [공유 기능 추가] 공유 메뉴 아이템 스타일 설정
-        MenuItem shareItem = menu.findItem(R.id.action_share);
-        if (shareItem != null) {
-            SpannableString s = new SpannableString(shareItem.getTitle());
-            s.setSpan(new ForegroundColorSpan(Color.parseColor("#000000")), 0, s.length(), 0);
-            s.setSpan(new StyleSpan(Typeface.BOLD), 0, s.length(), 0);
-            shareItem.setTitle(s);
-        }
-
-        MenuItem deleteItem = menu.findItem(R.id.action_delete);
-        if (deleteItem != null) {
-            SpannableString s = new SpannableString(deleteItem.getTitle());
-            s.setSpan(new ForegroundColorSpan(Color.parseColor("#000000")), 0, s.length(), 0);
-            s.setSpan(new StyleSpan(Typeface.BOLD), 0, s.length(), 0);
-            deleteItem.setTitle(s);
-        }
-        MenuItem contactItem = menu.findItem(R.id.action_contact);
-        if (contactItem != null) {
-            SpannableString s = new SpannableString(contactItem.getTitle());
-            s.setSpan(new ForegroundColorSpan(Color.parseColor("#000000")), 0, s.length(), 0);
-            s.setSpan(new StyleSpan(Typeface.BOLD), 0, s.length(), 0);
-            contactItem.setTitle(s);
-        }
-
-        // 신고하기 버튼 폰트 설정
-        MenuItem reportItem = menu.findItem(R.id.action_report);
-        if (reportItem != null) {
-            SpannableString s = new SpannableString(reportItem.getTitle());
-            s.setSpan(new ForegroundColorSpan(Color.parseColor("#000000")), 0, s.length(), 0);
-            s.setSpan(new StyleSpan(Typeface.BOLD), 0, s.length(), 0);
-            reportItem.setTitle(s);
-        }
+        // 메뉴 스타일 설정
+        setupMenuItemStyle(menu.findItem(R.id.action_share));
+        setupMenuItemStyle(menu.findItem(R.id.action_delete));
+        setupMenuItemStyle(menu.findItem(R.id.action_contact));
+        setupMenuItemStyle(menu.findItem(R.id.action_report));
 
         toolbar.setNavigationOnClickListener(v -> finish());
 
-        // [수정된 부분] 공유하기 메뉴 클릭 리스너 연결
         toolbar.setOnMenuItemClickListener(item -> {
             int id = item.getItemId();
             if (id == R.id.action_share) {
-                // 🚀 공유 로직 실행
-                Intent sendIntent = new Intent();
-                sendIntent.setAction(Intent.ACTION_SEND);
-                sendIntent.putExtra(Intent.EXTRA_TEXT, "[D-Tect 분석 결과]\n" + shareSummary);
-                sendIntent.setType("text/plain");
-                startActivity(Intent.createChooser(sendIntent, "결과 공유하기"));
+                // ★ [수정] 원본+히트맵 합성 이미지를 공유하도록 변경
+                shareResultWithCompositeImage();
                 return true;
             } else if (id == R.id.action_delete) {
                 showDeleteConfirmDialog();
                 return true;
             } else if (item.getItemId() == R.id.action_report) {
-                executeReport(); // 팝업 없이 바로 신고 페이지 이동
-            }else if (item.getItemId() == R.id.action_contact) {
-                // 문의하기 화면으로 이동
+                executeReport();
+            } else if (item.getItemId() == R.id.action_contact) {
                 Intent intent = new Intent(this, ContactActivity.class);
                 startActivity(intent);
                 return true;
@@ -136,23 +110,69 @@ public class ResultActivity extends AppCompatActivity {
         });
     }
 
-    // URL을 가져오는 공통 메서드 분리
+    private void setupMenuItemStyle(MenuItem item) {
+        if (item != null) {
+            SpannableString s = new SpannableString(item.getTitle());
+            s.setSpan(new ForegroundColorSpan(Color.BLACK), 0, s.length(), 0);
+            s.setSpan(new StyleSpan(Typeface.BOLD), 0, s.length(), 0);
+            item.setTitle(s);
+        }
+    }
+
+    // ★ [핵심] 원본 위에 히트맵이 겹쳐진 iv_container 영역을 통째로 캡처
+    private void shareResultWithCompositeImage() {
+        // 히트맵이 표시 중이 아닐 때는 텍스트만 공유
+        if (ivHeatmapImage.getVisibility() != View.VISIBLE) {
+            Intent sendIntent = new Intent(Intent.ACTION_SEND);
+            sendIntent.putExtra(Intent.EXTRA_TEXT, "[D-Tect 분석 결과]\n" + shareSummary);
+            sendIntent.setType("text/plain");
+            startActivity(Intent.createChooser(sendIntent, "결과 공유하기"));
+            return;
+        }
+
+        try {
+            // 1. ivContainer(FrameLayout)의 현재 모습을 비트맵으로 생성
+            Bitmap bitmap = Bitmap.createBitmap(ivContainer.getWidth(), ivContainer.getHeight(), Bitmap.Config.ARGB_8888);
+            Canvas canvas = new Canvas(bitmap);
+            ivContainer.draw(canvas);
+
+            // 2. 비트맵을 임시 파일로 저장
+            File cachePath = new File(getExternalCacheDir(), "images");
+            cachePath.mkdirs();
+            File file = new File(cachePath, "analysis_composite.png");
+            FileOutputStream stream = new FileOutputStream(file);
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream);
+            stream.close();
+
+            // 3. FileProvider를 통한 Uri 생성
+            Uri contentUri = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", file);
+
+            if (contentUri != null) {
+                Intent shareIntent = new Intent(Intent.ACTION_SEND);
+                shareIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                shareIntent.setDataAndType(contentUri, getContentResolver().getType(contentUri));
+                shareIntent.putExtra(Intent.EXTRA_STREAM, contentUri);
+                shareIntent.putExtra(Intent.EXTRA_TEXT, "[D-Tect 분석 결과]\n" + shareSummary);
+                shareIntent.setType("image/png");
+                startActivity(Intent.createChooser(shareIntent, "결과 공유하기"));
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+            Toast.makeText(this, "이미지 생성 중 오류가 발생했습니다.", Toast.LENGTH_SHORT).show();
+        }
+    }
+
     private String getSnsUrl() {
         String url = null;
-
-        // 1. Firebase에서 가져온 레코드에 URL이 있는지 확인
         if (currentRecord != null && currentRecord.getSnsUrl() != null && !currentRecord.getSnsUrl().isEmpty()) {
             url = currentRecord.getSnsUrl();
         }
-
-        // 2. 레코드에 없다면 전달받은 Intent에서 직접 확인
         if (url == null || url.isEmpty()) {
             Intent intent = getIntent();
             url = intent.getStringExtra("snsUrl");
             if (url == null) url = intent.getStringExtra("image_url");
             if (url == null) url = intent.getStringExtra("video_url");
         }
-
         return url;
     }
 
@@ -180,14 +200,12 @@ public class ResultActivity extends AppCompatActivity {
                 String uriString = intent.getStringExtra("original_image_uri");
                 Glide.with(this).load(Uri.parse(uriString)).into(ivOriginalImage);
             } else if (currentRecord != null && currentRecord.getOriginalUrl() != null) {
-                // ⭐️ URL 분석이나 영상 분석의 경우 Firebase에 저장된 URL을 사용
                 Glide.with(this).load(currentRecord.getOriginalUrl()).into(ivOriginalImage);
             }
 
             AnalysisResult result = intent.getParcelableExtra("analysis_result");
             if (result != null) {
                 updateUIByResult(result.probability >= 50.0f ? "Fake" : "Real", result.probability);
-
                 if (BitmapHolder.heatmapBitmap != null) {
                     ivHeatmapImage.setImageBitmap(BitmapHolder.heatmapBitmap);
                 }
@@ -251,8 +269,7 @@ public class ResultActivity extends AppCompatActivity {
         sbOpacitySlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                float alpha = progress / 100f;
-                ivHeatmapImage.setAlpha(alpha);
+                ivHeatmapImage.setAlpha(progress / 100f);
             }
             @Override
             public void onStartTrackingTouch(SeekBar seekBar) {}
@@ -263,35 +280,33 @@ public class ResultActivity extends AppCompatActivity {
 
     private void showDeleteConfirmDialog() {
         if (currentRecord == null) {
-            Toast.makeText(this, "이력(History) 화면에서 들어와야 삭제가 가능합니다.", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "이력 화면에서만 삭제가 가능합니다.", Toast.LENGTH_SHORT).show();
             return;
         }
-
-        new AlertDialog.Builder(this)
+        AlertDialog dialog = new AlertDialog.Builder(this)
                 .setMessage("이 기록을 삭제하시겠습니까?")
-                .setPositiveButton("네", (dialog, which) -> {
+                .setPositiveButton("네", (d, which) -> {
                     firebaseManager.deleteHistory(currentRecord, () -> {
                         Toast.makeText(ResultActivity.this, "기록이 삭제되었습니다.", Toast.LENGTH_SHORT).show();
                         finish();
                     });
                 })
-                .setNegativeButton("아니요", (dialog, which) -> dialog.dismiss())
-                .show();
+                .setNegativeButton("아니요", (d, which) -> d.dismiss())
+                .create();
+        dialog.show();
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(Color.BLACK);
+        dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(Color.BLACK);
     }
 
-    // 실제 플랫폼별 웹페이지 이동 로직
     private void executeReport() {
         String snsUrl = getSnsUrl();
-
         if (snsUrl != null && !snsUrl.isEmpty()) {
             String reportUrl = null;
-
             String lowerUrl = snsUrl.toLowerCase();
-
             if (lowerUrl.contains("youtube.com") || lowerUrl.contains("youtu.be")) {
-                reportUrl = "https://support.google.com/youtube/answer/2802027?hl=ko&co=GENIE.Platform%3DDesktop";
+                reportUrl = "https://support.google.com/youtube/answer/2802027";
             } else if (lowerUrl.contains("instagram.com")) {
-                reportUrl = "https://help.instagram.com/?locale=ko_KR";
+                reportUrl = "https://help.instagram.com/";
             } else if (lowerUrl.contains("tiktok.com")) {
                 reportUrl = "https://www.tiktok.com/safety/ko-kr/reporting/";
             }
@@ -301,15 +316,12 @@ public class ResultActivity extends AppCompatActivity {
             } else {
                 Toast.makeText(this, "지원하지 않는 SNS URL입니다.", Toast.LENGTH_SHORT).show();
             }
-        } else {
-            Toast.makeText(this, "URL 정보가 없는 데이터입니다.", Toast.LENGTH_SHORT).show();
         }
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        // 메모리 누수를 막기 위해 액티비티가 종료될 때 둘 다 비워줍니다.
         BitmapHolder.heatmapBitmap = null;
         BitmapHolder.originalBitmap = null;
     }
