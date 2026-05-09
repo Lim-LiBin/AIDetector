@@ -47,6 +47,9 @@ public class MainActivity extends AppCompatActivity {
     private AiProcessor aiProcessor;
     private CameraHandler cameraHandler;
 
+    // ★ [추가] 분석을 위해 떠났었는지 확인하는 플래그
+    private boolean isBackFromAnalysis = false;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -64,9 +67,12 @@ public class MainActivity extends AppCompatActivity {
         cameraHandler = new CameraHandler(this, viewFinder);
 
         // 2. 갤러리 런처 설정
+        // ┌────────────────────────────────────────────────────────┐
+        // │ [수정] 모든 타입(*/*)을 받을 수 있도록 설정하여 영상 선택 허용     │
+        // └────────────────────────────────────────────────────────┘
         galleryLauncher = registerForActivityResult(
                 new ActivityResultContracts.GetContent(),
-                uri -> { if (uri != null) processGalleryImage(uri); }
+                uri -> { if (uri != null) processGalleryMedia(uri); }
         );
 
         // 3. 선택 버튼 리스너 (팝업창 호출)
@@ -82,10 +88,18 @@ public class MainActivity extends AppCompatActivity {
                 capturePhotoFromHandler();
             } else {
                 // 사진이 준비된 상태면 검사를 시작합니다.
-                if (currentBitmap == null) {
-                    Toast.makeText(this, "분석할 사진을 선택해주세요!", Toast.LENGTH_SHORT).show();
+                if (currentImageUri == null) {
+                    Toast.makeText(this, "분석할 사진이나 영상을 선택해주세요!", Toast.LENGTH_SHORT).show();
                 } else {
-                    runDeepfakeAnalysisWithVisualization();
+                    // ┌────────────────────────────────────────────────────┐
+                    // │ [추가] 선택된 파일의 MIME 타입을 확인하여 영상 분석 분기 처리      │
+                    // └────────────────────────────────────────────────────┘
+                    String mimeType = getContentResolver().getType(currentImageUri);
+                    if (mimeType != null && mimeType.startsWith("video")) {
+                        runVideoAnalysisFromGallery();
+                    } else {
+                        runDeepfakeAnalysisWithVisualization();
+                    }
                 }
             }
         });
@@ -100,14 +114,27 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    // ★ [수정] 결과창에서 돌아올 때 액티비티 자체를 "새로고침" 시켜서 모든 자원을 초기화합니다.
+    @Override
+    protected void onRestart() {
+        super.onRestart();
+        // 액티비티를 강제로 다시 생성하여 첫 시작 상태로 만듭니다.
+        // 이렇게 하면 이전 사진 잔상과 카메라 검은 화면 문제가 동시에 해결됩니다.
+        finish();
+        startActivity(getIntent());
+    }
+
     //카메라/갤러리 선택 팝업
     private void showImageSourceDialog() {
-        String[] options = {"카메라로 촬영", "갤러리에서 선택"};
+        // ┌────────────────────────────────────────────────────────┐
+        // │ [수정] 메뉴 항목에 영상 포함 명시                            │
+        // └────────────────────────────────────────────────────────┘
+        String[] options = {"카메라로 촬영", "갤러리(이미지/영상) 선택"};
         new AlertDialog.Builder(this)
                 .setTitle("이미지 가져오기")
                 .setItems(options, (dialog, which) -> {
                     if (which == 0) startCameraMode();
-                    else galleryLauncher.launch("image/*");
+                    else galleryLauncher.launch("*/*"); // 갤러리 앱 호출 시 전체 타입 허용
                 })
                 .show();
     }
@@ -145,37 +172,50 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    //갤러리 이미지 처리
-    private void processGalleryImage(Uri uri) {
+    // ┌────────────────────────────────────────────────────────┐
+    // │ [수정] 갤러리 이미지/영상 처리 (기존 processGalleryImage를 확장) │
+    // └────────────────────────────────────────────────────────┘
+    private void processGalleryMedia(Uri uri) {
         this.currentImageUri = uri;
         stopCameraResources();
 
         viewFinder.setVisibility(View.GONE);
         galleryImageView.setVisibility(View.VISIBLE);
 
-        // ⭐️ [수정 핵심] 원본 해상도 그대로 가져오지 않고 안전하게 리사이징하여 가져옵니다.
-        currentBitmap = getResizedBitmap(uri, 1024);
+        String mimeType = getContentResolver().getType(uri);
 
-        if (currentBitmap != null) {
-            galleryImageView.setImageBitmap(currentBitmap);
-            btnCapture.setText("검사 시작");
+        if (mimeType != null && mimeType.startsWith("video")) {
+            // [영상일 경우] 썸네일을 생성하여 표시
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    Bitmap thumbnail = getContentResolver().loadThumbnail(uri, new android.util.Size(512, 512), null);
+                    galleryImageView.setImageBitmap(thumbnail);
+                } else {
+                    galleryImageView.setImageResource(android.R.drawable.presence_video_online);
+                }
+                currentBitmap = null; // 영상이므로 비트맵 분석은 건너뜀
+                btnCapture.setText("영상 분석 시작");
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         } else {
-            Toast.makeText(this, "이미지를 불러오는데 실패했습니다.", Toast.LENGTH_SHORT).show();
+            // [이미지일 경우] 기존 로직 유지
+            currentBitmap = getResizedBitmap(uri, 1024);
+            if (currentBitmap != null) {
+                galleryImageView.setImageBitmap(currentBitmap);
+                btnCapture.setText("검사 시작");
+            } else {
+                Toast.makeText(this, "이미지를 불러오는데 실패했습니다.", Toast.LENGTH_SHORT).show();
+            }
         }
     }
 
     // ⭐️ [추가된 메서드] OOM(메모리 부족) 방지를 위한 안전한 비트맵 리사이징 유틸리티
-    // MainActivity.java 내 getResizedBitmap 수정
     private Bitmap getResizedBitmap(Uri uri, int maxResolution) {
         try {
             InputStream inputStream = getContentResolver().openInputStream(uri);
-            // ⭐️ [수정] 옵션 설정 없이 원본을 그대로 읽어옵니다. (메모리가 허용하는 한)
             Bitmap rawBitmap = BitmapFactory.decodeStream(inputStream);
             inputStream.close();
-
-            if (rawBitmap == null) return null;
-
-            // 이후 scaleBitmapIfNeeded 등에서 부드럽게 리사이징되도록 넘겨줍니다.
             return rawBitmap;
         } catch (Exception e) {
             e.printStackTrace();
@@ -190,6 +230,17 @@ public class MainActivity extends AppCompatActivity {
         if (currentImageUri != null) {
             intent.putExtra("original_image_uri", currentImageUri.toString());
         }
+        startActivity(intent);
+    }
+
+    // ┌────────────────────────────────────────────────────────┐
+    // │ [추가] 갤러리에서 가져온 영상 분석을 위한 LoadingActivity 호출    │
+    // └────────────────────────────────────────────────────────┘
+    private void runVideoAnalysisFromGallery() {
+        Intent intent = new Intent(MainActivity.this, LoadingActivity.class);
+        intent.putExtra("video_url", currentImageUri.toString());
+        intent.putExtra("is_video_mode", true);
+        intent.putExtra("is_from_gallery", true);
         startActivity(intent);
     }
 
@@ -235,21 +286,8 @@ public class MainActivity extends AppCompatActivity {
 
     private boolean isVideoUrl(String url) {
         String lowerUrl = url.toLowerCase();
-
-        // 유튜브 (일반 + 단축 + 쇼츠)
-        if (lowerUrl.contains("youtube.com/watch") ||
-                lowerUrl.contains("youtu.be/") ||
-                lowerUrl.contains("/shorts/")) {
-            return true;
-        }
-
-        // 인스타그램 릴스
-        if (lowerUrl.contains("instagram.com/reel/") ||
-                lowerUrl.contains("instagram.com/p/")) {
-            return true;
-        }
-
-        // 일반 영상 확장자
+        if (lowerUrl.contains("youtube.com/watch") || lowerUrl.contains("youtu.be/") || lowerUrl.contains("/shorts/")) return true;
+        if (lowerUrl.contains("instagram.com/reel/") || lowerUrl.contains("instagram.com/p/")) return true;
         return url.matches(".*(?i)\\.(mp4|avi|mov|wmv|flv|webm)(\\?.*)?$");
     }
 
