@@ -55,6 +55,7 @@ public class MainActivity extends AppCompatActivity {
     private Uri currentImageUri = null;
     private AiProcessor aiProcessor;
     private CameraHandler cameraHandler;
+    private boolean isAnalyzing = false;
 
     // ★ [추가] 분석을 위해 떠났었는지 확인하는 플래그
     private boolean isBackFromAnalysis = false;
@@ -138,7 +139,7 @@ public class MainActivity extends AppCompatActivity {
     private void startInteractiveTutorial() {
         SharedPreferences prefs = getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
         // 이미 튜토리얼을 봤다면 실행하지 않음 (테스트 시엔 주석 처리하세요)
-        // if (prefs.getBoolean(KEY_HAS_SEEN_MAIN_TUTORIAL, false)) return;
+        if (prefs.getBoolean(KEY_HAS_SEEN_MAIN_TUTORIAL, false)) return;
 
         // 뷰가 완전히 그려진 후 1단계 시작
         View centerContainer = findViewById(R.id.centerContainer);
@@ -247,13 +248,33 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // ★ [수정] 결과창에서 돌아올 때 액티비티 자체를 "새로고침" 시켜서 모든 자원을 초기화합니다.
-    @Override
+    /*@Override
     protected void onRestart() {
         super.onRestart();
         // 액티비티를 강제로 다시 생성하여 첫 시작 상태로 만듭니다.
         // 이렇게 하면 이전 사진 잔상과 카메라 검은 화면 문제가 동시에 해결됩니다.
         finish();
         startActivity(getIntent());
+    }*/
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (isAnalyzing) {
+            // 분석을 마치고 돌아왔다면 초기화 로직 실행
+            resetMainUI();
+            isAnalyzing = false; // 플래그 리셋
+        }
+    }
+
+    // 4. UI 초기화 전용 함수
+    private void resetMainUI() {
+        currentBitmap = null;
+        currentImageUri = null;
+        galleryImageView.setImageBitmap(null);
+        galleryImageView.setVisibility(View.GONE);
+        viewFinder.setVisibility(View.VISIBLE); // 다시 카메라 화면이나 빈 화면으로
+        btnCapture.setText("사진 촬영");
     }
 
     //카메라/갤러리 선택 팝업
@@ -408,38 +429,54 @@ public class MainActivity extends AppCompatActivity {
     // │ [수정] 갤러리 이미지/영상 처리 (기존 processGalleryImage를 확장) │
     // └────────────────────────────────────────────────────────┘
     private void processGalleryMedia(Uri uri) {
-        this.currentImageUri = uri;
-        stopCameraResources();
+        this.currentImageUri = uri; //
+        stopCameraResources(); //
 
-        viewFinder.setVisibility(View.GONE);
-        galleryImageView.setVisibility(View.VISIBLE);
+        viewFinder.setVisibility(View.GONE); //
+        galleryImageView.setVisibility(View.VISIBLE); //
 
-        String mimeType = getContentResolver().getType(uri);
-        // ⭐️ [수정 핵심] 원본 해상도 그대로 가져오지 않고 안전하게 리사이징하여 가져옵니다.
-        currentBitmap = MediaHandler.processBitmap(this, uri);
+        String mimeType = getContentResolver().getType(uri); //
 
         if (mimeType != null && mimeType.startsWith("video")) {
-            // [영상일 경우] 썸네일을 생성하여 표시
+            // [영상 썸네일 추출 섹션]
             try {
+                Bitmap thumbnail = null;
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    Bitmap thumbnail = getContentResolver().loadThumbnail(uri, new android.util.Size(512, 512), null);
-                    galleryImageView.setImageBitmap(thumbnail);
+                    // Android 10 이상: 가장 권장되는 방식
+                    thumbnail = getContentResolver().loadThumbnail(uri, new android.util.Size(1024, 1024), null); //
                 } else {
-                    galleryImageView.setImageResource(android.R.drawable.presence_video_online);
+                    // Android 10 미만: MediaStore를 통한 추출
+                    String videoId = uri.getLastPathSegment(); //
+                    if (videoId != null) {
+                        thumbnail = android.provider.MediaStore.Video.Thumbnails.getThumbnail(
+                                getContentResolver(),
+                                Long.parseLong(videoId),
+                                android.provider.MediaStore.Video.Thumbnails.MINI_KIND, null);
+                    }
                 }
-                currentBitmap = null; // 영상이므로 비트맵 분석은 건너뜀
-                btnCapture.setText("영상 분석 시작");
-            } catch (IOException e) {
+
+                if (thumbnail != null) {
+                    galleryImageView.setImageBitmap(thumbnail); //
+                    this.currentBitmap = thumbnail; //
+                } else {
+                    galleryImageView.setImageResource(android.R.drawable.presence_video_online); //
+                }
+                btnCapture.setText("영상 분석 시작"); //
+            } catch (Exception e) {
                 e.printStackTrace();
+                galleryImageView.setImageResource(android.R.drawable.presence_video_online); //
+                btnCapture.setText("영상 분석 시작"); //
             }
         } else {
-            // [이미지일 경우] 기존 로직 유지
-            currentBitmap = getResizedBitmap(uri, 1024);
-            if (currentBitmap != null) {
-                galleryImageView.setImageBitmap(currentBitmap);
-                btnCapture.setText("검사 시작");
+            // [이미지 처리 섹션]
+            // ⭐️ 다른 함수(getResizedBitmap)를 그대로 사용하도록 유지
+            this.currentBitmap = getResizedBitmap(uri, 1024); //
+
+            if (this.currentBitmap != null) {
+                galleryImageView.setImageBitmap(this.currentBitmap); //
+                btnCapture.setText("검사 시작"); //
             } else {
-                Toast.makeText(this, "이미지를 불러오는데 실패했습니다.", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "이미지를 불러오는데 실패했습니다.", Toast.LENGTH_SHORT).show(); //
             }
         }
     }
@@ -459,6 +496,7 @@ public class MainActivity extends AppCompatActivity {
 
     // 분석 실행
     private void runDeepfakeAnalysisWithVisualization() {
+        isAnalyzing = true;
         BitmapHolder.originalBitmap = currentBitmap;
         Intent intent = new Intent(MainActivity.this, LoadingActivity.class);
         if (currentImageUri != null) {
