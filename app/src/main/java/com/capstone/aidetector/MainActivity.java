@@ -107,7 +107,7 @@ public class MainActivity extends AppCompatActivity {
                 .setTitle("이미지 가져오기")
                 .setItems(options, (dialog, which) -> {
                     if (which == 0) startCameraMode();
-                    else galleryLauncher.launch("image/*");
+                    else galleryLauncher.launch("*/*");
                 })
                 .show();
     }
@@ -154,7 +154,7 @@ public class MainActivity extends AppCompatActivity {
         galleryImageView.setVisibility(View.VISIBLE);
 
         // ⭐️ [수정 핵심] 원본 해상도 그대로 가져오지 않고 안전하게 리사이징하여 가져옵니다.
-        currentBitmap = getResizedBitmap(uri, 1024);
+        currentBitmap = MediaHandler.processBitmap(this, uri);
 
         if (currentBitmap != null) {
             galleryImageView.setImageBitmap(currentBitmap);
