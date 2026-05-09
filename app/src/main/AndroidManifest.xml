@@ -54,6 +54,12 @@
             android:name=".FindPasswordActivity"
             android:exported="false"/>
 
+        <activity android:name=".InquiryHistoryActivity"
+            android:exported="false"/>
+
+        <activity android:name=".InquiryDetailActivity"
+            android:exported="false"/>
+
         <activity android:name=".SettingsActivity"
             android:exported="false" />
 

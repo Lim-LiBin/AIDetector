@@ -131,6 +131,10 @@ public class SettingsActivity extends AppCompatActivity {
             startActivity(new Intent(this, HistoryActivity.class));
             finish();
         });
+        findViewById(R.id.tv_inquiry_history).setOnClickListener(v -> {
+            Intent intent = new Intent(this, InquiryHistoryActivity.class);
+            startActivity(intent);
+        });
     }
 
     // 비밀번호 입력 시 실시간으로 규칙(8자 이상 영문/숫자) 및 일치 여부 확인
