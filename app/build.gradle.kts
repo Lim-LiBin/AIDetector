@@ -90,4 +90,8 @@ dependencies {
 
     // ✅ 카카오톡 공유 SDK 추가
     implementation("com.kakao.sdk:v2-share:2.20.1")
+
+    //튜토리얼 라이브러리
+    //implementation("com.getkeepsafe.taptargetview:taptargetview:1.13.3")
+    implementation("com.github.skydoves:balloon:1.5.3")
 }
