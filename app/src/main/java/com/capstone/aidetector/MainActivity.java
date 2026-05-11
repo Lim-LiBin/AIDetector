@@ -15,6 +15,7 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.ImageView;
+import android.widget.ProgressBar;
 import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
@@ -56,6 +57,7 @@ public class MainActivity extends AppCompatActivity {
     private AiProcessor aiProcessor;
     private CameraHandler cameraHandler;
     private boolean isAnalyzing = false;
+    private ProgressBar loadingIndicator;
 
     // ★ [추가] 분석을 위해 떠났었는지 확인하는 플래그
     private boolean isBackFromAnalysis = false;
@@ -79,6 +81,7 @@ public class MainActivity extends AppCompatActivity {
         btnUrl = findViewById(R.id.btnUrl);
 
         cameraHandler = new CameraHandler(this, viewFinder);
+        loadingIndicator = findViewById(R.id.loadingIndicator);
 
         // 2. 갤러리 런처 설정
         // ┌────────────────────────────────────────────────────────┐
@@ -125,10 +128,12 @@ public class MainActivity extends AppCompatActivity {
 
         // 6. 하단 탭 이동 리스너
         findViewById(R.id.nav_history).setOnClickListener(v -> {
+            isAnalyzing = true;
             startActivity(new Intent(this, HistoryActivity.class));
         });
 
         findViewById(R.id.nav_settings).setOnClickListener(v -> {
+            isAnalyzing = true;
             startActivity(new Intent(this, SettingsActivity.class));
         });
 
@@ -260,21 +265,35 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        // ⭐️ 분석(사진, 영상, URL 모두 포함)을 마치고 돌아왔을 때 실행
         if (isAnalyzing) {
-            // 분석을 마치고 돌아왔다면 초기화 로직 실행
             resetMainUI();
             isAnalyzing = false; // 플래그 리셋
         }
     }
 
     // 4. UI 초기화 전용 함수
-    private void resetMainUI() {
+    private void resetMainUI() {// 1. 데이터 초기화
         currentBitmap = null;
         currentImageUri = null;
+        BitmapHolder.originalBitmap = null;
+
+        // 2. 뷰 초기화
         galleryImageView.setImageBitmap(null);
         galleryImageView.setVisibility(View.GONE);
-        viewFinder.setVisibility(View.VISIBLE); // 다시 카메라 화면이나 빈 화면으로
-        btnCapture.setText("사진 촬영");
+
+        // ⭐️ [수정] 첫 화면처럼 만들기 위해 viewFinder를 숨깁니다.
+        // 그래야 버튼을 눌렀을 때 "else" 문으로 타서 "분석할 사진을 선택해주세요" 토스트가 뜹니다.
+        viewFinder.setVisibility(View.GONE);
+
+        // 3. 로딩바 및 버튼 설정
+        if (loadingIndicator != null) {
+            loadingIndicator.setVisibility(View.VISIBLE); // 파란 동글뱅이 부활
+        }
+        btnCapture.setText("검사 시작"); // 버튼 문구 복구
+
+        // 4. 카메라 자원 해제
+        stopCameraResources();
     }
 
     //카메라/갤러리 선택 팝업
@@ -566,6 +585,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void processImageUrl(String url) {
+        isAnalyzing = true;
+        stopCameraResources();
         Intent intent = new Intent(MainActivity.this, LoadingActivity.class);
         intent.putExtra("image_url", url);
         intent.putExtra("is_from_url", true);
@@ -573,6 +594,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void processVideoUrl(String url) {
+        isAnalyzing = true;
+        stopCameraResources();
         Intent intent = new Intent(MainActivity.this, LoadingActivity.class);
         intent.putExtra("video_url", url);
         intent.putExtra("is_video_mode", true);
