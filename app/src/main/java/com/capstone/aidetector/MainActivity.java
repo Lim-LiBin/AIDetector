@@ -275,6 +275,9 @@ public class MainActivity extends AppCompatActivity {
         galleryImageView.setVisibility(View.GONE);
         viewFinder.setVisibility(View.VISIBLE); // 다시 카메라 화면이나 빈 화면으로
         btnCapture.setText("사진 촬영");
+
+        findViewById(R.id.centerContainer).setBackgroundColor(android.graphics.Color.parseColor("#1E1838"));
+        findViewById(R.id.loadingIndicator).setVisibility(View.VISIBLE);
     }
 
     //카메라/갤러리 선택 팝업
@@ -417,6 +420,9 @@ public class MainActivity extends AppCompatActivity {
                 galleryImageView.setVisibility(View.VISIBLE);
                 galleryImageView.setImageBitmap(currentBitmap);
 
+                findViewById(R.id.centerContainer).setBackgroundColor(android.graphics.Color.parseColor("#110E1B"));
+                findViewById(R.id.loadingIndicator).setVisibility(View.GONE);
+
                 btnCapture.setText("검사 시작"); // 촬영 후 텍스트 변경
 
                 // 촬영 완료 후 튜토리얼 2탄 실행
@@ -434,6 +440,9 @@ public class MainActivity extends AppCompatActivity {
 
         viewFinder.setVisibility(View.GONE); //
         galleryImageView.setVisibility(View.VISIBLE); //
+
+        findViewById(R.id.centerContainer).setBackgroundColor(android.graphics.Color.parseColor("#110E1B"));
+        findViewById(R.id.loadingIndicator).setVisibility(View.GONE);
 
         String mimeType = getContentResolver().getType(uri); //
 
