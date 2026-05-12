@@ -271,7 +271,9 @@ public class LoadingActivity extends AppCompatActivity {
 
     private void startLoadingAnimation() {
         ValueAnimator animator = ValueAnimator.ofInt(0, 100);
-        animator.setDuration(3000);
+        // 애니메이션이 천천히 차오르도록 7초(7000ms) 또는 8초로 늘려줍니다.
+        animator.setDuration(7000);
+
         animator.addUpdateListener(animation -> updateLoadingUI((int) animation.getAnimatedValue()));
         animator.addListener(new AnimatorListenerAdapter() {
             @Override public void onAnimationEnd(Animator a) {
@@ -283,9 +285,21 @@ public class LoadingActivity extends AppCompatActivity {
     }
 
     private void updateLoadingUI(int progress) {
-        if (progress < 33) { setStepColors("#FF5E62", "#333333", "#333333"); tvStepText.setText("데이터 읽는 중..."); }
-        else if (progress < 66) { setStepColors("#333333", "#FFEA00", "#333333"); tvStepText.setText("AI 분석 중..."); }
-        else { setStepColors("#333333", "#333333", "#00FF7F"); tvStepText.setText("결과 준비 중..."); }
+        // 0 ~ 19 (초반 20%, 데이터 읽는 중)
+        if (progress < 20) {
+            setStepColors("#FF5E62", "#333333", "#333333");
+            tvStepText.setText("데이터 읽는 중...");
+        }
+        // 20 ~ 89 (대부분의 시간을 AI 분석에 할당)
+        else if (progress < 90) {
+            setStepColors("#333333", "#FFEA00", "#333333");
+            tvStepText.setText("AI 분석 중...");
+        }
+        // 90 ~ 100 (마지막 10% 일 때만 결과 준비 중 띄움)
+        else {
+            setStepColors("#333333", "#333333", "#00FF7F");
+            tvStepText.setText("결과 준비 중...");
+        }
     }
 
     private void setStepColors(String c1, String c2, String c3) {
