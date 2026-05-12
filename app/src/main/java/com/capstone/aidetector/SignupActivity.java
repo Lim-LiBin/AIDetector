@@ -181,7 +181,12 @@ public class SignupActivity extends AppCompatActivity {
                     db.collection("users").document(uid).set(user)
                             .addOnSuccessListener(aVoid -> {
                                 Toast.makeText(this, "회원가입 성공!", Toast.LENGTH_SHORT).show();
-                                finish();
+
+                                // ⭐️ [추가] 새로 가입한 회원이므로 기기 내 튜토리얼 시청 기록을 '안 봄(false)'으로 초기화합니다.
+                                android.content.SharedPreferences prefs = getSharedPreferences("TutorialPrefs", android.content.Context.MODE_PRIVATE);
+                                prefs.edit().putBoolean("HasSeenMainTutorial", false).apply();
+
+                                finish(); // 회원가입 화면 닫기 (로그인 화면으로 이동)
                             });
                 })
                 .addOnFailureListener(e -> Toast.makeText(this, "가입 실패: " + e.getMessage(), Toast.LENGTH_SHORT).show());
