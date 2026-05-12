@@ -61,11 +61,11 @@ public class FirebaseManager {
     private void uploadHeatmap(AnalysisResult result, String timestampStr, String originalUrl, String snsUrl, OnUploadCompleteListener listener) {
         String uid = getUid();
         ByteArrayOutputStream heatmapBaos = new ByteArrayOutputStream();
-        result.heatmapBitmap.compress(Bitmap.CompressFormat.JPEG, 90, heatmapBaos);
+        result.heatmapBitmap.compress(Bitmap.CompressFormat.PNG, 100, heatmapBaos);
 
         //경로 체계화: heatmaps/{uid}/파일명
         StorageReference heatmapRef = storage.getReference()
-                .child("heatmaps/" + uid + "/heatmap_" + timestampStr + ".jpg");
+                .child("heatmaps/" + uid + "/heatmap_" + timestampStr + ".png");
 
         heatmapRef.putBytes(heatmapBaos.toByteArray()).addOnSuccessListener(task -> {
             heatmapRef.getDownloadUrl().addOnSuccessListener(heatmapUri -> {
