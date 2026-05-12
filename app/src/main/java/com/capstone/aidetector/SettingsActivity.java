@@ -122,6 +122,26 @@ public class SettingsActivity extends AppCompatActivity {
             popup.show();
         });
 
+        // 튜토리얼 다시보기 텍스트 클릭 이벤트
+        findViewById(R.id.tv_replay_tutorial).setOnClickListener(v -> {
+            SharedPreferences prefs = getSharedPreferences("TutorialPrefs", Context.MODE_PRIVATE);
+
+            // 모든 튜토리얼 기록을 false(안 본 상태)로 초기화
+            prefs.edit()
+                    .putBoolean("HasSeenMainTutorial", false)
+                    .putBoolean("NEEDS_HISTORY_TUTORIAL", false)
+                    .putBoolean("NEEDS_SETTINGS_TUTORIAL", false)
+                    .apply();
+
+            Toast.makeText(this, "튜토리얼을 다시 시작합니다.", Toast.LENGTH_SHORT).show();
+
+            // 메인 화면으로 이동하면서 이전 스택 깔끔하게 지우기 (앱 처음 켠 것과 같은 효과)
+            Intent intent = new Intent(this, MainActivity.class);
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(intent);
+            finish();
+        });
+
         // 하단 네비게이션 탭 이동 (MainActivity, HistoryActivity)
         findViewById(R.id.nav_home).setOnClickListener(v -> {
             startActivity(new Intent(this, MainActivity.class));
@@ -301,13 +321,14 @@ public class SettingsActivity extends AppCompatActivity {
         }
     }
 
+    // SettingsActivity.java의 showSettingsTutorial() 메서드 수정
     private void showSettingsTutorial(SharedPreferences prefs) {
         View targetView = getWindow().getDecorView();
 
         Balloon balloon = new Balloon.Builder(this)
-                .setWidthRatio(0.85f) // ⭐️ 0.7f에서 0.85f로 넓혀서 글씨가 들어갈 공간 확보!
+                .setWidthRatio(0.85f)
                 .setHeight(BalloonSizeSpec.WRAP)
-                .setText("설정에서는 내 정보를\n수정할 수 있습니다.\n\n이것으로 튜토리얼을 마칩니다!")
+                .setText("설정에서는 내 정보를 \n수정할 수 있습니다.\n\n튜토리얼을 다시 보려면\n아래의 버튼을 눌러주세요.")
                 .setTextColorResource(android.R.color.black)
                 .setBackgroundColor(android.graphics.Color.parseColor("#FFFF00"))
                 .setCornerRadius(8f)
