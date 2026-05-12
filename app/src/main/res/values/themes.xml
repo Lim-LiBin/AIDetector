@@ -1,9 +1,13 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme. -->
     <style name="Base.Theme.AIDetector" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Customize your light theme here. -->
-        <!-- <item name="colorPrimary">@color/my_light_primary</item> -->
     </style>
 
-    <style name="Theme.AIDetector" parent="Base.Theme.AIDetector" />
+    <style name="Theme.AIDetector" parent="Base.Theme.AIDetector">
+        <item name="popupMenuBackground">@android:color/white</item>
+        <item name="actionOverflowMenuStyle">@style/WhitePopupMenu</item>
+    </style>
+
+    <style name="WhitePopupMenu" parent="Widget.AppCompat.PopupMenu.Overflow">
+        <item name="android:popupBackground">@android:color/white</item>
+    </style>
 </resources>
