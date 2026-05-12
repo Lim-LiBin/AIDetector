@@ -167,8 +167,17 @@ public class LoadingActivity extends AppCompatActivity {
 
         savedResult = new AnalysisResult(score, null);
 
-        // Firebase 업로드
         String snsUrl = getIntent().getStringExtra("snsUrl");
+
+        // Firebase 업로드
+        if (snsUrl == null && !getIntent().getBooleanExtra("is_local_video", false)) {
+            if (getIntent().getBooleanExtra("is_from_url", false)) {
+                snsUrl = getIntent().getStringExtra("image_url");
+            } else if (getIntent().getBooleanExtra("is_video_mode", false)) {
+                snsUrl = getIntent().getStringExtra("video_url");
+            }
+        }
+
         new FirebaseManager().uploadAnalysisResult(new AnalysisResult(score, heatmapBitmap), bitmap, snsUrl, record -> {
             savedRecord = record;
             checkDataAndMove();
@@ -300,10 +309,18 @@ public class LoadingActivity extends AppCompatActivity {
                 Intent nextIntent = new Intent(LoadingActivity.this, ResultActivity.class);
                 nextIntent.putExtra("record", savedRecord);
                 nextIntent.putExtra("analysis_result", savedResult);
+
                 String snsUrl = getIntent().getStringExtra("snsUrl");
-                if (snsUrl == null) snsUrl = getIntent().getStringExtra("image_url");
-                if (snsUrl == null) snsUrl = getIntent().getStringExtra("video_url");
+                if (snsUrl == null && !getIntent().getBooleanExtra("is_local_video", false)) {
+                    if (getIntent().getBooleanExtra("is_from_url", false)) {
+                        snsUrl = getIntent().getStringExtra("image_url");
+                    } else if (getIntent().getBooleanExtra("is_video_mode", false)) {
+                        snsUrl = getIntent().getStringExtra("video_url");
+                    }
+                }
+
                 if (snsUrl != null) nextIntent.putExtra("snsUrl", snsUrl);
+
                 String originalUri = getIntent().getStringExtra("original_image_uri");
                 if (originalUri == null) originalUri = getIntent().getStringExtra("image_url");
                 if (originalUri != null) nextIntent.putExtra("original_image_uri", originalUri);
