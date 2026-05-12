@@ -185,6 +185,8 @@ public class ResultActivity extends AppCompatActivity {
             } else if (intent.hasExtra("original_image_uri")) {
                 String uriString = intent.getStringExtra("original_image_uri");
                 Glide.with(this).load(Uri.parse(uriString)).into(ivOriginalImage);
+            } else if (BitmapHolder.originalBitmap != null) {
+                ivOriginalImage.setImageBitmap(BitmapHolder.originalBitmap);
             }
 
             AnalysisResult result = intent.getParcelableExtra("analysis_result");
