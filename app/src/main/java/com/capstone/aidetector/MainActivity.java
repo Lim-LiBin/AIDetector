@@ -474,6 +474,8 @@ public class MainActivity extends AppCompatActivity {
         BitmapHolder.originalBitmap = currentBitmap;
         Intent intent = new Intent(MainActivity.this, LoadingActivity.class);
         if (currentImageUri != null) {
+            intent.setData(currentImageUri);
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             intent.putExtra("original_image_uri", currentImageUri.toString());
         }
         startActivity(intent);
@@ -483,8 +485,16 @@ public class MainActivity extends AppCompatActivity {
     // │ [추가] 갤러리에서 가져온 영상 분석을 위한 LoadingActivity 호출    │
     // └────────────────────────────────────────────────────────┘
     private void runVideoAnalysisFromGallery() {
+        if (currentImageUri == null) {
+            Toast.makeText(this, "선택된 영상이 없습니다.", Toast.LENGTH_SHORT).show();
+            return;
+        }
         isAnalyzing = true;
         Intent intent = new Intent(MainActivity.this, LoadingActivity.class);
+
+        intent.setData(currentImageUri);
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+
         intent.putExtra("video_url", currentImageUri.toString());
         intent.putExtra("is_video_mode", true);
         intent.putExtra("is_local_video", true);

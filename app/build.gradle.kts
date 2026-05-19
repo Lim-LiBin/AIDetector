@@ -7,6 +7,10 @@ android {
     namespace = "com.capstone.aidetector"
     compileSdk = 36
 
+    androidResources {
+        noCompress += "tflite"
+    }
+
     // 16KB 페이지 호환성 에러 방지를 위해 추가
     packaging {
         jniLibs {
@@ -94,4 +98,8 @@ dependencies {
     //튜토리얼 라이브러리
     //implementation("com.getkeepsafe.taptargetview:taptargetview:1.13.3")
     implementation("com.github.skydoves:balloon:1.5.3")
+
+    //ML Kit (얼굴 크롭)
+    implementation("com.google.mlkit:face-detection:16.1.7")
+    implementation("com.google.android.gms:play-services-tasks:18.1.0")
 }

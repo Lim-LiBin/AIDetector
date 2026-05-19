@@ -28,6 +28,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import com.bumptech.glide.Glide;
 import com.bumptech.glide.request.target.CustomTarget;
 import com.bumptech.glide.request.transition.Transition;
+import com.google.mlkit.vision.face.FaceDetectorOptions;
 
 import org.tensorflow.lite.support.image.TensorImage;
 
@@ -74,7 +75,10 @@ public class LoadingActivity extends AppCompatActivity {
             savedResult = (AnalysisResult) getIntent().getParcelableExtra("analysis_result");
         } else if (isLocalVideo) {
             // ⭐️ 갤러리 영상 로컬 전수 조사 실행
-            Uri videoUri = Uri.parse(getIntent().getStringExtra("video_url"));
+            Uri videoUri = getIntent().getData();
+            if (videoUri == null) {
+                videoUri = Uri.parse(getIntent().getStringExtra("video_uri"));
+            }
             performLocalVideoAnalysis(videoUri);
         } else if (isVideoMode) {
             String videoUrl = getIntent().getStringExtra("video_url");
@@ -95,71 +99,260 @@ public class LoadingActivity extends AppCompatActivity {
     // ⭐️ [신규] 로컬 영상 0.5초 간격 전수 조사 (최댓값 추출)
     private void performLocalVideoAnalysis(Uri videoUri) {
         new Thread(() -> {
+
             MediaMetadataRetriever retriever = new MediaMetadataRetriever();
+            java.io.File tempFile = null;
+
             try {
-                Log.d(TAG, "로컬 영상 분석 시작 - URI: " + videoUri);
 
-                // 1. [중요] Context(this)를 함께 전달해야 content:// URI에 안전하게 접근합니다.
-                retriever.setDataSource(this, videoUri);
+                Log.d(TAG, "로컬 영상 분석 시작: " + videoUri);
+                 tempFile = createTempFileFromUri(videoUri);
 
-                String time = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION);
-                if (time == null) {
-                    Log.e(TAG, "영상 메타데이터 추출 실패 (Duration is null)");
-                    finishWithError("영상을 읽을 수 없습니다.");
-                    return;
+                if (tempFile != null && tempFile.exists()) {
+                    retriever.setDataSource(tempFile.getAbsolutePath());
+                    Log.d(TAG, "temp file 사용: " + tempFile.getAbsolutePath());
+                } else {
+                    retriever.setDataSource(this, videoUri);
+                    Log.d(TAG, "fallback uri 사용");
                 }
 
-                long durationUs = Long.parseLong(time) * 1000;
-                Log.d(TAG, "영상 총 길이(us): " + durationUs);
+                //영상 길이 추출
+                String durationStr =
+                        retriever.extractMetadata(
+                                MediaMetadataRetriever.METADATA_KEY_DURATION
+                        );
 
+                long durationUs;
+
+                if (durationStr != null && !durationStr.equals("0")) {
+                    durationUs = Long.parseLong(durationStr) * 1000;
+                } else {
+                    durationUs = 5000000;
+                }
+
+                Log.d(TAG, "영상 길이(us): " + durationUs);
+
+                // 결과 저장 변수
                 float maxScore = -1f;
+
                 Bitmap bestFrame = null;
                 float[][] bestHeatmap = null;
 
+                int bestX1 = 0;
+                int bestY1 = 0;
+                int bestCropW = 0;
+                int bestCropH = 0;
+
+                Bitmap prevFrame = null;
+
                 AiProcessor aiProcessor = new AiProcessor(this);
 
-                // 0.5초 간격으로 분석
-                for (long i = 0; i < durationUs; i += 500000) {
-                    // 2. [수정] OPTION_CLOSEST_SYNC 대신 OPTION_CLOSEST를 사용하세요.
-                    // SYNC는 키프레임만 찾아서 null을 줄 때가 많지만, CLOSEST는 어떻게든 가장 가까운 화면을 그려냅니다.
-                    Bitmap frame = retriever.getFrameAtTime(i, MediaMetadataRetriever.OPTION_CLOSEST);
+                // ML Kit Face Detector
+                FaceDetectorOptions options =
+                        new FaceDetectorOptions.Builder()
+                                .setPerformanceMode(
+                                        FaceDetectorOptions.PERFORMANCE_MODE_FAST
+                                )
+                                .build();
+
+                com.google.mlkit.vision.face.FaceDetector detector =
+                        com.google.mlkit.vision.face.FaceDetection
+                                .getClient(options);
+
+
+                //0.5초 간격 샘플링
+                for (long timeUs = 500000;
+                     timeUs < durationUs;
+                     timeUs += 500000) {
+
+                    Log.d(TAG, "탐색 위치(us): " + timeUs);
+
+                    Bitmap frame = null;
+
+                    // 1차 시도
+                    try {
+                        frame = retriever.getFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST);
+                    } catch (Exception e) {
+                        Log.e(TAG, "OPTION_CLOSEST 실패", e);
+                    }
+
+                    // 2차 fallback
+                    if (frame == null) {
+                        try {
+                            frame = retriever.getFrameAtTime(timeUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC);
+                        } catch (Exception e) {
+                            Log.e(TAG, "OPTION_CLOSEST_SYNC 실패", e);
+                        }
+                    }
 
                     if (frame == null) {
-                        Log.w(TAG, i + "us 지점 프레임 추출 실패 - 건너뜁니다.");
+                        Log.w(TAG, "프레임 null -> skip");
                         continue;
                     }
 
-                    // AI 분석 수행
-                    TensorImage tensorImage = aiProcessor.processImage(frame);
-                    Map<String, Object> results = aiProcessor.runInference(tensorImage);
-                    float currentScore = (float) results.get("score") * 100f;
+                    // 중복 프레임 필터
+                    if (prevFrame != null && isSameBitmap(frame, prevFrame)) {
+                        Log.w(TAG, "중복 프레임 감지 -> skip");
+                        continue;
+                    }
 
-                    if (currentScore > maxScore) {
-                        maxScore = currentScore;
-                        bestFrame = frame;
-                        bestHeatmap = (float[][]) results.get("heatmap");
+                    prevFrame = frame;
+
+                    // 얼굴 검출
+                    int x1 = 0;
+                    int y1 = 0;
+
+                    int cropW = frame.getWidth();
+                    int cropH = frame.getHeight();
+
+                    Bitmap inputBitmap = frame;
+
+                    try {
+                        com.google.mlkit.vision.common.InputImage
+                                visionImage = com.google.mlkit.vision.common
+                                        .InputImage
+                                        .fromBitmap(frame, 0);
+
+                        List<com.google.mlkit.vision.face.Face> faces = com.google.android.gms.tasks.Tasks.await(detector.process(visionImage));
+
+                        if (faces != null && !faces.isEmpty()) {
+                            com.google.mlkit.vision.face.Face face = faces.get(0);
+                            android.graphics.Rect bounds = face.getBoundingBox();
+
+                            int w = bounds.width();
+                            int h = bounds.height();
+
+                            // 얼굴 패딩
+                            int pw = (int) (w * 0.15f);
+                            int ph = (int) (h * 0.15f);
+
+                            x1 = Math.max(bounds.left - pw, 0);
+                            y1 = Math.max(bounds.top - ph, 0);
+
+                            int x2 = Math.min(bounds.left + w + pw, frame.getWidth());
+
+                            int y2 = Math.min(bounds.top + h + ph, frame.getHeight());
+
+                            cropW = x2 - x1;
+                            cropH = y2 - y1;
+
+                            if (cropW > 0 && cropH > 0) {
+                                inputBitmap = Bitmap.createBitmap(frame, x1, y1, cropW, cropH);
+                            }
+                        }
+                    } catch (Exception e) {
+                        Log.e(TAG, "얼굴 검출 실패", e);
+                    }
+
+                    // AI 추론
+                    try {
+                        TensorImage tensorImage = aiProcessor.processImage(inputBitmap);
+
+                        Map<String, Object> results = aiProcessor.runInference(tensorImage);
+
+                        float currentScore = (float) results.get("score") * 100f;
+
+                        Log.d(TAG, (timeUs / 1000000.0) + "초 점수: " + currentScore);
+
+                        // 최고 점수 갱신
+                        if (currentScore > maxScore) {
+                            maxScore = currentScore;
+                            bestFrame = frame;
+                            bestHeatmap = (float[][]) results.get("heatmap");
+
+                            bestX1 = x1;
+                            bestY1 = y1;
+                            bestCropW = cropW;
+                            bestCropH = cropH;
+                        }
+                    } catch (Exception e) {
+                        Log.e(TAG, "AI 추론 실패", e);
                     }
                 }
 
+                // 최종 결과
                 if (bestFrame != null) {
-                    finalizeAnalysis(bestFrame, maxScore, bestHeatmap);
+                    finalizeAnalysis(bestFrame, maxScore, bestHeatmap, bestX1, bestY1, bestCropW, bestCropH);
                 } else {
-                    Log.e(TAG, "모든 프레임 추출에 실패함");
-                    finishWithError("영상에서 이미지를 뽑아낼 수 없습니다.");
+                    finishWithError("영상에서 얼굴 프레임을 찾을 수 없습니다.");
                 }
             } catch (Exception e) {
-                Log.e(TAG, "로컬 영상 분석 중 예외 발생", e);
-                finishWithError("분석 오류: " + e.getMessage());
+                Log.e(TAG, "로컬 영상 분석 오류", e);
+                finishWithError("영상 분석 중 오류가 발생했습니다.");
             } finally {
                 try {
                     retriever.release();
                 } catch (Exception ignored) {}
+
+                // temp file 삭제
+                if (tempFile != null && tempFile.exists()) {
+                    tempFile.delete();
+                }
             }
+
         }).start();
     }
 
+
+    private boolean isSameBitmap(Bitmap b1, Bitmap b2) {
+        if (b1 == null || b2 == null) {
+            return false;
+        }
+
+        if (b1.getWidth() != b2.getWidth()
+                || b1.getHeight() != b2.getHeight()) {
+            return false;
+        }
+
+        int[] xs = {
+                b1.getWidth() / 4,
+                b1.getWidth() / 2,
+                b1.getWidth() * 3 / 4
+        };
+
+        int[] ys = {
+                b1.getHeight() / 4,
+                b1.getHeight() / 2,
+                b1.getHeight() * 3 / 4
+        };
+
+        for (int x : xs) {
+            for (int y : ys) {
+                if (b1.getPixel(x, y) != b2.getPixel(x, y)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+
+    //RI → temp mp4 파일 복사
+    private java.io.File createTempFileFromUri(Uri uri) {
+        try {
+            java.io.File tempFile = java.io.File.createTempFile("temp_video", ".mp4", getCacheDir());
+            java.io.InputStream inputStream = getContentResolver().openInputStream(uri);
+            java.io.FileOutputStream outputStream = new java.io.FileOutputStream(tempFile);
+
+            byte[] buffer = new byte[4096];
+            int len;
+
+            while ((len = inputStream.read(buffer)) > 0) {
+                outputStream.write(buffer, 0, len);
+            }
+
+            outputStream.close();
+            inputStream.close();
+
+            return tempFile;
+        } catch (Exception e) {
+            Log.e(TAG, "temp file 생성 실패", e);
+            return null;
+        }
+    }
+
     // ⭐️ [통합] 원본 크기 유지 및 결과 처리 공통 함수
-    private void finalizeAnalysis(Bitmap bitmap, float score, float[][] heatmapMatrix) {
+    private void finalizeAnalysis(Bitmap bitmap, float score, float[][] heatmapMatrix, int x1, int y1, int cropW, int cropH) {
         // 비트맵 객체 저장 (원본 크기 보존)
         BitmapHolder.originalBitmap = bitmap;
 
@@ -191,14 +384,52 @@ public class LoadingActivity extends AppCompatActivity {
     private void performAnalysis(Bitmap bitmap) {
         if (bitmap == null) { finishWithError("이미지 데이터가 없습니다."); return; }
         try {
+            com.google.mlkit.vision.common.InputImage visionImage = com.google.mlkit.vision.common.InputImage.fromBitmap(bitmap, 0);
+            com.google.mlkit.vision.face.FaceDetectorOptions options = new com.google.mlkit.vision.face.FaceDetectorOptions.Builder()
+                    .setPerformanceMode(com.google.mlkit.vision.face.FaceDetectorOptions.PERFORMANCE_MODE_FAST)
+                    .build();
+            com.google.mlkit.vision.face.FaceDetector detector = com.google.mlkit.vision.face.FaceDetection.getClient(options);
+
+            List<com.google.mlkit.vision.face.Face> faces = com.google.android.gms.tasks.Tasks.await(detector.process(visionImage));
+
+            int x1 = 0, y1 = 0;
+            int cropW = bitmap.getWidth();
+            int cropH = bitmap.getHeight();
+            Bitmap inputNodeBitmap = bitmap;
+
+            if (faces != null && !faces.isEmpty()) {
+                com.google.mlkit.vision.face.Face targetFace = faces.get(0);
+                android.graphics.Rect bounds = targetFace.getBoundingBox();
+
+                int x = bounds.left;
+                int y = bounds.top;
+                int w = bounds.width();
+                int h = bounds.height();
+
+                int pw = (int) (w * 0.15);
+                int ph = (int) (h * 0.15);
+
+                x1 = Math.max(x - pw, 0);
+                y1 = Math.max(y - ph, 0);
+                int x2 = Math.min(x + w + pw, bitmap.getWidth());
+                int y2 = Math.min(y + h + ph, bitmap.getHeight());
+
+                cropW = x2 - x1;
+                cropH = y2 - y1;
+
+                if (cropW > 0 && cropH > 0) {
+                    inputNodeBitmap = Bitmap.createBitmap(bitmap, x1, y1, cropW, cropH);
+                }
+            }
+
             AiProcessor aiProcessor = new AiProcessor(this);
-            TensorImage processedImage = aiProcessor.processImage(bitmap);
+            TensorImage processedImage = aiProcessor.processImage(inputNodeBitmap);
             Map<String, Object> results = aiProcessor.runInference(processedImage);
 
             float score = (float) results.get("score") * 100f;
             float[][] heatmapMatrix = (float[][]) results.get("heatmap");
 
-            finalizeAnalysis(bitmap, score, heatmapMatrix);
+            finalizeAnalysis(bitmap, score, heatmapMatrix, x1, y1, cropW, cropH);
         } catch (Exception e) {
             Log.e(TAG, "분석 오류", e);
             finishWithError("AI 분석 중 오류가 발생했습니다.");
@@ -221,7 +452,7 @@ public class LoadingActivity extends AppCompatActivity {
                     }
                 }
                 // 통합 함수 호출 (frameBitmap의 크기 정보 자동 인식)
-                finalizeAnalysis(frameBitmap, prob, heatmapMatrix);
+                finalizeAnalysis(frameBitmap, prob, heatmapMatrix, 0, 0, frameBitmap.getWidth(), frameBitmap.getHeight());
             } catch (Exception e) {
                 Log.e(TAG, "영상 결과 처리 오류", e);
                 finishWithError("결과 처리 중 오류 발생");
