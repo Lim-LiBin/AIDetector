@@ -38,7 +38,7 @@ public class SettingsActivity extends AppCompatActivity {
     private static final String TAG = "SettingsActivity";
 
     // UI 컴포넌트 선언
-    private EditText etName, etId, etPw, etPwConfirm, etPhone;
+    private EditText etName, etId, etPw, etPwConfirm;
     private TextInputLayout pwLayout, pwConfirmLayout;
     private Button btnSave;
     private TextView tvLogout;
@@ -51,7 +51,6 @@ public class SettingsActivity extends AppCompatActivity {
 
     // 유효성 검사를 위한 정규식
     private static final String PW_PATTERN = "^(?=.*[A-Za-z])(?=.*\\d).{8,}$";
-    private static final String PHONE_PATTERN = "^010-\\d{4}-\\d{4}$";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -77,7 +76,6 @@ public class SettingsActivity extends AppCompatActivity {
         etId = findViewById(R.id.et_setting_id);
         etPw = findViewById(R.id.et_setting_pw);
         etPwConfirm = findViewById(R.id.et_setting_pw_confirm);
-        etPhone = findViewById(R.id.et_setting_phone);
         pwLayout = findViewById(R.id.pw_layout);
         pwConfirmLayout = findViewById(R.id.pw_confirm_layout);
         btnSave = findViewById(R.id.btn_save);
@@ -194,7 +192,6 @@ public class SettingsActivity extends AppCompatActivity {
                 .addOnSuccessListener(doc -> {
                     if (doc.exists()) {
                         etName.setText(doc.getString("name"));
-                        etPhone.setText(doc.getString("phone"));
                     }
                 });
     }
@@ -206,13 +203,6 @@ public class SettingsActivity extends AppCompatActivity {
 
         String pw = etPw.getText().toString().trim();
         String pwConfirm = etPwConfirm.getText().toString().trim();
-        String phone = etPhone.getText().toString().trim();
-
-        // 전화번호 정규식 검사
-        if (!Pattern.matches(PHONE_PATTERN, phone)) {
-            Toast.makeText(this, "전화번호 형식을 확인해주세요.", Toast.LENGTH_SHORT).show();
-            return;
-        }
 
         // 비밀번호를 변경하려고 시도하는지 여부 파악 (빈칸이 아닐 때만)
         boolean isChangingPw = !pw.isEmpty();
@@ -224,24 +214,6 @@ public class SettingsActivity extends AppCompatActivity {
                 return;
             }
         }
-
-        // Firestore에 전화번호 업데이트
-        db.collection("users").document(user.getUid()).update("phone", phone)
-                .addOnSuccessListener(aVoid -> {
-                    // 전화번호 저장이 성공하면, 비밀번호 변경 시도 여부에 따라 처리
-                    if (isChangingPw) {
-                        // Auth에서 비밀번호 업데이트
-                        user.updatePassword(pw).addOnSuccessListener(unused -> {
-                            Toast.makeText(this, "정보가 수정되었습니다.", Toast.LENGTH_SHORT).show();
-                            // 변경 완료 후 칸 비우기
-                            etPw.setText("");
-                            etPwConfirm.setText("");
-                        }).addOnFailureListener(e -> handleAuthError(e));
-                    } else {
-                        // 비밀번호 변경 없이 전화번호만 바꾼 경우
-                        Toast.makeText(this, "정보가 수정되었습니다.", Toast.LENGTH_SHORT).show();
-                    }
-                });
     }
 
     // 보안상의 이유(장기간 로그인 등)로 작업이 거부되었을 때 예외 처리

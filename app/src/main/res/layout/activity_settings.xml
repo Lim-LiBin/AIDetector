@@ -123,18 +123,6 @@
                     android:inputType="textPassword" />
             </com.google.android.material.textfield.TextInputLayout>
 
-            <EditText
-                android:id="@+id/et_setting_phone"
-                android:layout_width="match_parent"
-                android:layout_height="60dp"
-                android:background="#1E1838"
-                android:hint="전화번호"
-                android:inputType="phone"
-                android:padding="16dp"
-                android:textColor="#FFFFFF"
-                android:textColorHint="#AAAAAA"
-                android:layout_marginBottom="32dp"/>
-
             <Button
                 android:id="@+id/btn_save"
                 android:layout_width="match_parent"

@@ -17,6 +17,7 @@ import android.os.Looper;
 import android.util.Base64;
 import android.util.Log;
 import android.view.View;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -45,6 +46,7 @@ public class LoadingActivity extends AppCompatActivity {
     private HistoryRecord savedRecord;
     private AnalysisResult savedResult;
     private boolean isAnimationFinished = false;
+    private ProgressBar loadingIndicator;
 
     private TextView tvStepText;
     private View step1, step2, step3;
@@ -58,6 +60,7 @@ public class LoadingActivity extends AppCompatActivity {
         step1 = findViewById(R.id.step1);
         step2 = findViewById(R.id.step2);
         step3 = findViewById(R.id.step3);
+        loadingIndicator = findViewById(R.id.loadingIndicator);
 
         boolean isLocalVideo = getIntent().getBooleanExtra("is_local_video", false);
         boolean isVideoMode = getIntent().getBooleanExtra("is_video_mode", false);

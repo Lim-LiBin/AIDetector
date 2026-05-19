@@ -61,7 +61,7 @@ public class HistoryActivity extends AppCompatActivity {
 
         // 데이터 불러오기는 어댑터 세팅 이후에 진행 (loadData()는 삭제하고 중복 방지를 위해 제외)
         // 실제 데이터 로딩은 onResume()의 fetchData()에서 일괄 처리하도록 놔둡니다.
-        checkEmptyState();
+        //checkEmptyState();
 
         // 뷰 모드 전환 버튼 이벤트
         btnToggleView.setOnClickListener(v -> {

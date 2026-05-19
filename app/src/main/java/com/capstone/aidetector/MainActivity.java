@@ -57,7 +57,6 @@ public class MainActivity extends AppCompatActivity {
     private AiProcessor aiProcessor;
     private CameraHandler cameraHandler;
     private boolean isAnalyzing = false;
-    private ProgressBar loadingIndicator;
 
     // ★ [추가] 분석을 위해 떠났었는지 확인하는 플래그
     private boolean isBackFromAnalysis = false;
@@ -80,7 +79,6 @@ public class MainActivity extends AppCompatActivity {
         btnUrl = findViewById(R.id.btnUrl);
 
         cameraHandler = new CameraHandler(this, viewFinder);
-        loadingIndicator = findViewById(R.id.loadingIndicator);
 
         // 2. 갤러리 런처 설정
         // ┌────────────────────────────────────────────────────────┐
@@ -312,16 +310,11 @@ public class MainActivity extends AppCompatActivity {
         galleryImageView.setVisibility(View.GONE);
 
         findViewById(R.id.centerContainer).setBackgroundColor(android.graphics.Color.parseColor("#1E1838"));
-        findViewById(R.id.loadingIndicator).setVisibility(View.VISIBLE);
 
         // ⭐️ [수정] 첫 화면처럼 만들기 위해 viewFinder를 숨깁니다.
         // 그래야 버튼을 눌렀을 때 "else" 문으로 타서 "분석할 사진을 선택해주세요" 토스트가 뜹니다.
         viewFinder.setVisibility(View.GONE);
 
-        // 3. 로딩바 및 버튼 설정
-        if (loadingIndicator != null) {
-            loadingIndicator.setVisibility(View.VISIBLE); // 파란 동글뱅이 부활
-        }
         btnCapture.setText("검사 시작"); // 버튼 문구 복구
 
         // 4. 카메라 자원 해제
@@ -398,7 +391,6 @@ public class MainActivity extends AppCompatActivity {
                 galleryImageView.setImageBitmap(currentBitmap);
 
                 findViewById(R.id.centerContainer).setBackgroundColor(android.graphics.Color.parseColor("#110E1B"));
-                findViewById(R.id.loadingIndicator).setVisibility(View.GONE);
 
                 btnCapture.setText("검사 시작"); // 촬영 후 텍스트 변경
             });
@@ -416,7 +408,6 @@ public class MainActivity extends AppCompatActivity {
         galleryImageView.setVisibility(View.VISIBLE); //
 
         findViewById(R.id.centerContainer).setBackgroundColor(android.graphics.Color.parseColor("#110E1B"));
-        findViewById(R.id.loadingIndicator).setVisibility(View.GONE);
 
         String mimeType = getContentResolver().getType(uri); //
 

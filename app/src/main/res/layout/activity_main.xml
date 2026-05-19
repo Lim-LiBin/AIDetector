@@ -33,13 +33,6 @@
         app:layout_constraintTop_toBottomOf="@id/tv_title"
         app:layout_constraintVertical_bias="0.4">
 
-        <ProgressBar
-            android:id="@+id/loadingIndicator"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:indeterminateTint="#00D2FF" />
-
         <ImageView
             android:id="@+id/galleryImageView"
             android:layout_width="match_parent"
