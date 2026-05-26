@@ -131,7 +131,7 @@ def analyze_video():
             return jsonify({'error': 'URL이 필요합니다'}), 400
 
         url = data['url']
-        print(f"\n[요청 받음] URL: {url}")
+        print(f"\n[요청 받음] URL: {repr(url)}")
 
         result = video_processor.process_video(url)
         print(f"[응답 전송] result={result['result']}, prob={result['probability']:.4f}")

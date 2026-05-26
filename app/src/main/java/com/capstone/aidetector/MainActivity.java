@@ -15,7 +15,7 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.ImageView;
-import android.widget.ProgressBar;
+import android.widget.ViewFlipper;
 import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
@@ -47,6 +47,7 @@ public class MainActivity extends AppCompatActivity {
     private ImageButton btnSelect;
     private Button btnUrl;
 
+    private ViewFlipper sampleFlipper;
     private static final String TAG = "AiDetector_Main";
     private static final int REQUEST_CODE_PERMISSIONS = 10;
     private static final String[] REQUIRED_PERMISSIONS = {Manifest.permission.CAMERA};
@@ -80,6 +81,7 @@ public class MainActivity extends AppCompatActivity {
 
         cameraHandler = new CameraHandler(this, viewFinder);
 
+        sampleFlipper = findViewById(R.id.sampleFlipper);
         // 2. 갤러리 런처 설정
         // ┌────────────────────────────────────────────────────────┐
         // │ [수정] 모든 타입(*/*)을 받을 수 있도록 설정하여 영상 선택 허용     │
@@ -317,6 +319,9 @@ public class MainActivity extends AppCompatActivity {
 
         btnCapture.setText("검사\n시작"); // 버튼 문구 복구
 
+        sampleFlipper.setVisibility(View.VISIBLE);
+        sampleFlipper.startFlipping();
+
         // 4. 카메라 자원 해제
         stopCameraResources();
     }
@@ -367,6 +372,9 @@ public class MainActivity extends AppCompatActivity {
             currentBitmap = null;
             currentImageUri = null;
 
+            sampleFlipper.setVisibility(View.GONE);
+            sampleFlipper.stopFlipping();
+
             viewFinder.setVisibility(View.VISIBLE);
             galleryImageView.setVisibility(View.GONE);
             btnCapture.setText("사진 촬영"); // 버튼 텍스트 변경
@@ -392,6 +400,9 @@ public class MainActivity extends AppCompatActivity {
 
                 findViewById(R.id.centerContainer).setBackgroundColor(android.graphics.Color.parseColor("#110E1B"));
 
+                sampleFlipper.setVisibility(View.GONE);
+                sampleFlipper.stopFlipping();
+
                 btnCapture.setText("검사\n시작"); // 촬영 후 텍스트 변경
             });
         });
@@ -408,6 +419,9 @@ public class MainActivity extends AppCompatActivity {
         galleryImageView.setVisibility(View.VISIBLE); //
 
         findViewById(R.id.centerContainer).setBackgroundColor(android.graphics.Color.parseColor("#110E1B"));
+
+        sampleFlipper.setVisibility(View.GONE);
+        sampleFlipper.stopFlipping();
 
         String mimeType = getContentResolver().getType(uri); //
 
