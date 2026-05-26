@@ -113,8 +113,20 @@ public class HistoryAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
         HistoryRecord item = items.get(position);
         boolean isSelected = selectedDocIds.contains(item.getDocumentId());
 
-        boolean isFake = item.getResult() != null ? item.getResult().equalsIgnoreCase("Fake") : (item.getProbability() > 50.0f);
-        String resultText = isFake ? "Fake" : "Real";
+        float prob = item.getProbability();
+        String resultText;
+        int statusColor;
+
+        if (prob <= 35.0f) {
+            resultText = "Real";
+            statusColor = Color.parseColor("#00D2FF"); // 파란색
+        } else if (prob <= 65.0f) {
+            resultText = "Warning";
+            statusColor = Color.parseColor("#FFBB00"); // 노란색
+        } else {
+            resultText = "Fake";
+            statusColor = Color.parseColor("#FF5E62"); // 빨간색
+        }
 
         // 체크박스 네온 색상 룰
         ColorStateList checkboxTint = new ColorStateList(
@@ -134,7 +146,7 @@ public class HistoryAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
             GradientDrawable drawable = new GradientDrawable();
             drawable.setCornerRadius(24f);
             drawable.setColor(Color.parseColor("#1E1838"));
-            drawable.setStroke(4, isFake ? Color.parseColor("#FF5E62") : Color.parseColor("#00D2FF"));
+            drawable.setStroke(4, statusColor);
 
             lHolder.tvDate.setText(dateStr(item));
             lHolder.tvResult.setText("판별결과 : " + resultText);
@@ -146,7 +158,7 @@ public class HistoryAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
 
             lHolder.tvResult.setTypeface(null, Typeface.BOLD);
             lHolder.tvResult.setTextSize(18f);
-            lHolder.tvResult.setTextColor(isFake ? Color.parseColor("#FF5E62") : Color.parseColor("#00D2FF"));
+            lHolder.tvResult.setTextColor(statusColor);
 
             Glide.with(context).load(item.getOriginalUrl()).into(lHolder.ivThumbnail);
 
@@ -160,8 +172,8 @@ public class HistoryAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
             // 네온 테두리 적용
             GradientDrawable borderDrawable = new GradientDrawable();
             borderDrawable.setCornerRadius(16f);
-            borderDrawable.setStroke(6, isFake ? Color.parseColor("#FF5E62") : Color.parseColor("#00D2FF"));
 
+            borderDrawable.setStroke(6, statusColor);
             // 전체 뷰가 아닌 '사진 상자'에만 테두리를 씌움!
             gHolder.galleryImageContainer.setBackground(borderDrawable);
 
