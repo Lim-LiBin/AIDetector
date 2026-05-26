@@ -358,10 +358,10 @@ public class LoadingActivity extends AppCompatActivity {
 
         // 원본 크기(bitmap.getWidth/Height)를 사용하여 히트맵 생성
         HeatmapProcessor hp = new HeatmapProcessor();
-        Bitmap heatmapBitmap = hp.createHeatmapImage(heatmapMatrix, bitmap.getWidth(), bitmap.getHeight());
+        Bitmap heatmapBitmap = hp.createHeatmapImage(heatmapMatrix, bitmap.getWidth(), bitmap.getHeight(), x1, y1, cropW, cropH);
         BitmapHolder.heatmapBitmap = heatmapBitmap;
 
-        savedResult = new AnalysisResult(score, null);
+        savedResult = new AnalysisResult(score, heatmapBitmap);
 
         String snsUrl = getIntent().getStringExtra("snsUrl");
 

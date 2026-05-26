@@ -48,20 +48,18 @@ public class HeatmapProcessor {
         return fullSizeOverlay;
     }
 
-    public Bitmap createHeatmapImage(float[][] heatmap, int targetWidth, int targetHeight) {
-        // 1. 먼저 224x224 히트맵 생성
+    public Bitmap createHeatmapImage(float[][] heatmap, int fullWidth, int fullHeight, int x1, int y1, int cropW, int cropH) {
         Bitmap raw = createRawHeatmap(heatmap);
 
-        // 2. 원본 크기로 리사이즈
-        /*Bitmap resizedHeatmap = Bitmap.createScaledBitmap(
-                heatmap224,
-                targetWidth,
-                targetHeight,
-                true  // 부드러운 필터링
-        );*/
-
-        Bitmap res = Bitmap.createScaledBitmap(raw, targetWidth, targetHeight, true);
+        Bitmap faceHeatmap = Bitmap.createScaledBitmap(raw, cropW, cropH, true);
         raw.recycle();
-        return res;
+
+        Bitmap fullSizeBitmap = Bitmap.createBitmap(fullWidth, fullHeight, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(fullSizeBitmap);
+
+        canvas.drawBitmap(faceHeatmap, x1, y1, null);
+
+        faceHeatmap.recycle();
+        return fullSizeBitmap;
     }
 }
