@@ -315,7 +315,7 @@ public class MainActivity extends AppCompatActivity {
         // 그래야 버튼을 눌렀을 때 "else" 문으로 타서 "분석할 사진을 선택해주세요" 토스트가 뜹니다.
         viewFinder.setVisibility(View.GONE);
 
-        btnCapture.setText("검사 시작"); // 버튼 문구 복구
+        btnCapture.setText("검사\n시작"); // 버튼 문구 복구
 
         // 4. 카메라 자원 해제
         stopCameraResources();
@@ -392,7 +392,7 @@ public class MainActivity extends AppCompatActivity {
 
                 findViewById(R.id.centerContainer).setBackgroundColor(android.graphics.Color.parseColor("#110E1B"));
 
-                btnCapture.setText("검사 시작"); // 촬영 후 텍스트 변경
+                btnCapture.setText("검사\n시작"); // 촬영 후 텍스트 변경
             });
         });
     }
@@ -435,11 +435,11 @@ public class MainActivity extends AppCompatActivity {
                 } else {
                     galleryImageView.setImageResource(android.R.drawable.presence_video_online); //
                 }
-                btnCapture.setText("영상 분석 시작"); //
+                btnCapture.setText("검사\n시작"); //
             } catch (Exception e) {
                 e.printStackTrace();
                 galleryImageView.setImageResource(android.R.drawable.presence_video_online); //
-                btnCapture.setText("영상 분석 시작"); //
+                btnCapture.setText("검사\n시작"); //
             }
         } else {
             // [이미지 처리 섹션]
@@ -448,7 +448,7 @@ public class MainActivity extends AppCompatActivity {
 
             if (this.currentBitmap != null) {
                 galleryImageView.setImageBitmap(this.currentBitmap); //
-                btnCapture.setText("검사 시작"); //
+                btnCapture.setText("검사\n시작"); //
             } else {
                 Toast.makeText(this, "이미지를 불러오는데 실패했습니다.", Toast.LENGTH_SHORT).show(); //
             }
