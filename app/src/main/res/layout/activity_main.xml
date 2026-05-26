@@ -10,9 +10,9 @@
     android:layout_width="wrap_content"
     android:layout_height="wrap_content"
     android:layout_marginTop="50dp"
-    android:text="D-Tect"
+    android:text="딥페이크 판독기"
     android:textColor="#00D2FF"
-    android:textSize="35sp"
+    android:textSize="30sp"
     app:layout_constraintEnd_toEndOf="parent"
     app:layout_constraintStart_toStartOf="parent"
     app:layout_constraintTop_toTopOf="parent" />
