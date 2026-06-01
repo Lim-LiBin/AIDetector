@@ -11,7 +11,7 @@ android {
         noCompress += "tflite"
     }
 
-    // 16KB 페이지 호환성 에러 방지를 위해 추가
+    // 16KB 페이지 호환성 문제 방지
     packaging {
         jniLibs {
             useLegacyPackaging = true
@@ -41,7 +41,7 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
-    // packaging 추가
+
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -49,7 +49,7 @@ android {
         jniLibs {
             useLegacyPackaging = true
         }
-        // ✅ TFLite 모델 압축 방지 설정
+        // TFLite 모델 압축 방지 설정
         resources.pickFirsts += "**.tflite"
     }
 }
@@ -76,30 +76,29 @@ dependencies {
     implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
     implementation("androidx.camera:camera-view:$cameraxVersion")
 
-    // 🔥 TensorFlow Lite 라이브러리
+    // TensorFlow Lite 라이브러리
     implementation("org.tensorflow:tensorflow-lite-support:0.4.4")
     implementation("org.tensorflow:tensorflow-lite:2.14.0")
     //implementation("com.google.ai.edge.litert:litert:1.0.1")
 
-    // Glide (이미지 로드)
+    // Glide 이미지 로드 라이브러리
     implementation("com.github.bumptech.glide:glide:4.16.0")
     annotationProcessor("com.github.bumptech.glide:compiler:4.16.0")
 
-    // Retrofit (서버 통신)
+    // Retrofit 서버 통신 라이브러리
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
 
-    // OkHttp (로깅)
+    // OkHttp 로깅 라이브러리
     implementation("com.squareup.okhttp3:logging-interceptor:4.11.0")
 
-    // ✅ 카카오톡 공유 SDK 추가
+    // 카카오톡 공유 SDK
     implementation("com.kakao.sdk:v2-share:2.20.1")
 
-    //튜토리얼 라이브러리
-    //implementation("com.getkeepsafe.taptargetview:taptargetview:1.13.3")
+    // 튜토리얼 말풍선 라이브러리
     implementation("com.github.skydoves:balloon:1.5.3")
 
-    //ML Kit (얼굴 크롭)
+    // ML Kit 얼굴 검출 라이브러리
     implementation("com.google.mlkit:face-detection:16.1.7")
     implementation("com.google.android.gms:play-services-tasks:18.1.0")
 }

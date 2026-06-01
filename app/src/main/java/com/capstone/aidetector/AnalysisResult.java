@@ -6,6 +6,7 @@ import android.os.Parcel;
 import android.os.Parcelable;
 import java.io.ByteArrayOutputStream;
 
+// AI 분석 결과인 확률값과 히트맵 이미지를 화면 간 전달하기 위한 Parcelable 데이터 클래스
 public class AnalysisResult implements Parcelable {
     public float probability;
     public Bitmap heatmapBitmap;
@@ -16,9 +17,9 @@ public class AnalysisResult implements Parcelable {
     }
 
     protected AnalysisResult(Parcel in) {
+        // Parcel에 저장된 확률값과 히트맵 이미지를 복원
         probability = in.readFloat();
 
-        // ✅ byte array로 읽어서 Bitmap으로 변환
         byte[] bitmapBytes = in.createByteArray();
         if (bitmapBytes != null && bitmapBytes.length > 0) {
             heatmapBitmap = BitmapFactory.decodeByteArray(bitmapBytes, 0, bitmapBytes.length);
@@ -44,9 +45,10 @@ public class AnalysisResult implements Parcelable {
 
     @Override
     public void writeToParcel(Parcel dest, int flags) {
+        // 화면 간 전달을 위해 확률값과 히트맵 이미지를 Parcel에 저장
         dest.writeFloat(probability);
 
-        // ✅ Bitmap을 JPEG로 압축해서 byte array로 전달
+        // Bitmap 전달 용량을 줄이기 위해 JPEG byte array로 변환
         if (heatmapBitmap != null) {
             ByteArrayOutputStream stream = new ByteArrayOutputStream();
             heatmapBitmap.compress(Bitmap.CompressFormat.JPEG, 80, stream);

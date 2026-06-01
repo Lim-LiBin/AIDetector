@@ -68,7 +68,7 @@
         <activity android:name=".ContactActivity"
             android:exported="false" />
 
-        <!-- ★ [추가] 공유를 위해 임시 파일을 외부 앱에 제공하는 Provider -->
+        <!-- 공유를 위해 임시 파일을 외부 앱에 제공하는 Provider -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

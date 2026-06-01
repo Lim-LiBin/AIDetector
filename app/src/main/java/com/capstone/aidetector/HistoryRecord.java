@@ -3,24 +3,25 @@ package com.capstone.aidetector;
 import java.util.Date;
 import java.io.Serializable;
 
+// 분석 이력 정보를 저장하고 화면 간 전달하기 위한 데이터 클래스
 public class HistoryRecord implements Serializable {
-    private String documentId; // Firestore 문서 고유 ID (삭제 시 필요)
-    private String uid;        // 사용자 식별자 (일단 "test_user_01"로)
-    private String result;     // "Real" 또는 "Fake"
-    private float probability; // 판별 확률 수치
+    private String documentId; // Firestore 문서 고유 ID
+    private String uid;        // 사용자 식별자
+    private String result;     // 분석결과
+    private float probability; // 판별 확률
     private String originalUrl; // 원본 이미지 Storage 주소
     private String heatmapUrl;  // 히트맵 이미지 Storage 주소
-    private Date timestamp; // 서버 저장 시간 (정렬 기준)
+    private Date timestamp; // 분석 결과 저장 시간
 
-    private String snsUrl;
+    private String snsUrl; // 분석에 사용된 SNS URL
 
     public String getSnsUrl() { return snsUrl;}
     public void setSnsUrl(String snsUrl) {this.snsUrl = snsUrl; }
 
-    // 빈 생성자 (Firestore가 데이터를 자동으로 변환할 때 필요)
+    // Firestore 자동 매핑을 위한 빈 생성자
     public HistoryRecord() {}
 
-    // 전체 생성자
+    // 분석 이력 객체 생성을 위한 전체 생성자
     public HistoryRecord(String uid, String result, float probability, String originalUrl, String heatmapUrl, Date timestamp) {
         this.uid = uid;
         this.result = result;
@@ -30,7 +31,7 @@ public class HistoryRecord implements Serializable {
         this.timestamp = timestamp;
     }
 
-    // Getter & Setter
+    // 각 필드 접근 및 수정 메서드
     public String getDocumentId() { return documentId; }
     public void setDocumentId(String id) { this.documentId = id; }
     public String getUid() { return uid; }

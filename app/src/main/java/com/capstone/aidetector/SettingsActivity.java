@@ -4,7 +4,6 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
-import android.util.Log;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageButton;
@@ -33,23 +32,22 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.view.View;
 
+// 사용자 정보 수정, 로그아웃, 회원 탈퇴, 튜토리얼 재실생을 담당하는 설정 화면
 public class SettingsActivity extends AppCompatActivity {
 
-    private static final String TAG = "SettingsActivity";
-
-    // UI 컴포넌트 선언
+    // 설정 화면 UI 컴포넌트
     private EditText etName, etId, etPw, etPwConfirm;
     private TextInputLayout pwLayout, pwConfirmLayout;
     private Button btnSave;
     private TextView tvLogout;
     private ImageButton btnMoreMenu;
 
-    // Firebase 연동 객체 선언
+    // Firebase 인증, Firestore, Storage 연동 객체
     private FirebaseAuth auth;
     private FirebaseFirestore db;
     private FirebaseStorage storage;
 
-    // 유효성 검사를 위한 정규식
+    // 비밀번호 유효성 검사를 위한 정규식
     private static final String PW_PATTERN = "^(?=.*[A-Za-z])(?=.*\\d).{8,}$";
 
     @Override
@@ -62,7 +60,7 @@ public class SettingsActivity extends AppCompatActivity {
         db = FirebaseFirestore.getInstance();
         storage = FirebaseStorage.getInstance();
 
-        // 뷰 초기화 및 리스너 설정, 사용자 정보 불러오기 실행
+        // 화면 초기화, 이벤트 설정, 사용자 정보 조회
         initViews();
         setupListeners();
         loadUserInfo();
@@ -70,7 +68,7 @@ public class SettingsActivity extends AppCompatActivity {
         checkAndRunTutorial();
     }
 
-    // XML에 정의된 뷰들을 변수와 연결
+    // XML에 정의된 View를 변수와 연결
     private void initViews() {
         etName = findViewById(R.id.et_setting_name);
         etId = findViewById(R.id.et_setting_id);
@@ -83,20 +81,19 @@ public class SettingsActivity extends AppCompatActivity {
         btnMoreMenu = findViewById(R.id.btn_more_menu);
     }
 
-    // 각종 클릭 및 입력 이벤트 리스너 설정
+    // 버튼 클릭 및 입력 이벤트 리스너 설정
     private void setupListeners() {
-        // 저장하기 버튼 (유효성 검사 후 정보 업데이트)
+        // 저장 버튼 클릭 시 사용자 정보 저장 처리
         btnSave.setOnClickListener(v -> saveUserInfo());
 
-        // 로그아웃 텍스트 클릭 시 팝업 호출
+        // 로그아웃 텍스트 클릭 시 확인 팝업 표시
         tvLogout.setOnClickListener(v -> showLogoutDialog());
 
-        // 비밀번호 실시간 유효성 검사 (TextWatcher 사용)
+        // 비밀번호 입력값 변경 시 실시간 유효성 검사
         TextWatcher pwWatcher = new TextWatcher() {
             @Override
             public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
 
-            // 텍스트가 변경될 때마다 비밀번호 검사 실행
             @Override
             public void onTextChanged(CharSequence s, int start, int before, int count) {
                 checkPasswordRealTime();
@@ -104,27 +101,26 @@ public class SettingsActivity extends AppCompatActivity {
             @Override
             public void afterTextChanged(Editable s) {}
         };
-        // 새 비밀번호와 비밀번호 확인 입력칸에 TextWatcher 부착
+        // 새 비밀번호와 비밀번호 확인 입력칸에 TextWatcher 적용
         etPw.addTextChangedListener(pwWatcher);
         etPwConfirm.addTextChangedListener(pwWatcher);
 
-        // 우측 상단 더보기 아이콘(세로 점 3개) 클릭 시 팝업 메뉴 (탈퇴하기)
+        // 더보기 메뉴에서 회원 탈퇴 팝업 표시
         btnMoreMenu.setOnClickListener(v -> {
             PopupMenu popup = new PopupMenu(this, btnMoreMenu);
             popup.getMenu().add("탈퇴하기");
-            // 메뉴 항목 선택 시 동작
+
             popup.setOnMenuItemClickListener(item -> {
-                showWithdrawDialog(); // 탈퇴 경고 팝업 호출
+                showWithdrawDialog();
                 return true;
             });
             popup.show();
         });
 
-        // 튜토리얼 다시보기 텍스트 클릭 이벤트
+        // 튜토리얼 다시보기 클릭 시 튜토리얼 상태 초기화 후 메인 화면 이동
         findViewById(R.id.tv_replay_tutorial).setOnClickListener(v -> {
             SharedPreferences prefs = getSharedPreferences("TutorialPrefs", Context.MODE_PRIVATE);
 
-            // 모든 튜토리얼 기록을 false(안 본 상태)로 초기화
             prefs.edit()
                     .putBoolean("HasSeenMainTutorial", false)
                     .putBoolean("NEEDS_HISTORY_TUTORIAL", false)
@@ -133,34 +129,37 @@ public class SettingsActivity extends AppCompatActivity {
 
             Toast.makeText(this, "튜토리얼을 다시 시작합니다.", Toast.LENGTH_SHORT).show();
 
-            // 메인 화면으로 이동하면서 이전 스택 깔끔하게 지우기 (앱 처음 켠 것과 같은 효과)
             Intent intent = new Intent(this, MainActivity.class);
             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivity(intent);
             finish();
         });
 
-        // 하단 네비게이션 탭 이동 (MainActivity, HistoryActivity)
+        // 하단 네비게이션에서 홈 화면으로 이동
         findViewById(R.id.nav_home).setOnClickListener(v -> {
             startActivity(new Intent(this, MainActivity.class));
             finish();
         });
+
+        // 하단 네비게이션에서 이력 화면으로 이동
         findViewById(R.id.nav_history).setOnClickListener(v -> {
             startActivity(new Intent(this, HistoryActivity.class));
             finish();
         });
+
+        // 문의 내역 화면으로 이동
         findViewById(R.id.tv_inquiry_history).setOnClickListener(v -> {
             Intent intent = new Intent(this, InquiryHistoryActivity.class);
             startActivity(intent);
         });
     }
 
-    // 비밀번호 입력 시 실시간으로 규칙(8자 이상 영문/숫자) 및 일치 여부 확인
+    // 비밀번호 입력 시 규칙과 일치 여부를 실시간으로 검사
     private void checkPasswordRealTime() {
         String pw = etPw.getText().toString().trim();
         String pwConfirm = etPwConfirm.getText().toString().trim();
 
-        // 새 비밀번호 형식 검사 (빈칸이면 에러 없음)
+        // 새 비밀번호가 비어 있지 않을 때만 형식 검사
         if (pw.isEmpty()) {
             pwLayout.setError(null);
         } else if (!Pattern.matches(PW_PATTERN, pw)) {
@@ -169,7 +168,7 @@ public class SettingsActivity extends AppCompatActivity {
             pwLayout.setError(null);
         }
 
-        // 비밀번호 확인 일치 여부 검사 (빈칸이면 에러 없음)
+        // 비밀번호 확인값이 비어 있지 않을 때만 일치 여부 검사
         if (pwConfirm.isEmpty()) {
             pwConfirmLayout.setError(null);
         } else if (!pw.equals(pwConfirm)) {
@@ -179,15 +178,15 @@ public class SettingsActivity extends AppCompatActivity {
         }
     }
 
-    // Firebase Auth와 Firestore에서 현재 접속한 사용자의 정보를 가져와 화면에 표시
+    // Firebase Auth와 Firestore에서 현재 사용자 정보를 불러와 화면에 표시
     private void loadUserInfo() {
         FirebaseUser user = auth.getCurrentUser();
         if (user == null) return;
 
-        // 이메일(아이디) 세팅
+        // Firebase Auth에 저장된 이메일 표시
         etId.setText(user.getEmail());
 
-        // Firestore에서 이름과 전화번호 정보 조회
+        // Firestore에서 이름 정보 조회
         db.collection("users").document(user.getUid()).get()
                 .addOnSuccessListener(doc -> {
                     if (doc.exists()) {
@@ -196,7 +195,7 @@ public class SettingsActivity extends AppCompatActivity {
                 });
     }
 
-    // 수정된 정보를 저장하는 메서드
+    // 사용자 정보 저장 전 비밀번호 변경 입력값 검증
     private void saveUserInfo() {
         FirebaseUser user = auth.getCurrentUser();
         if (user == null) return;
@@ -204,11 +203,11 @@ public class SettingsActivity extends AppCompatActivity {
         String pw = etPw.getText().toString().trim();
         String pwConfirm = etPwConfirm.getText().toString().trim();
 
-        // 비밀번호를 변경하려고 시도하는지 여부 파악 (빈칸이 아닐 때만)
+        // 새 비밀번호가 입력된 경우에만 비밀번호 변경 검증 수행
         boolean isChangingPw = !pw.isEmpty();
 
         if (isChangingPw) {
-            // 비밀번호에 에러가 있거나 비밀번호 확인 칸이 비어있으면 저장 중단
+            // 비밀번호 형식 또는 확인값이 올바르지 않으면 저장 중단
             if (pwLayout.getError() != null || pwConfirmLayout.getError() != null || pwConfirm.isEmpty()) {
                 Toast.makeText(this, "비밀번호 입력을 확인해주세요.", Toast.LENGTH_SHORT).show();
                 return;
@@ -216,7 +215,7 @@ public class SettingsActivity extends AppCompatActivity {
         }
     }
 
-    // 보안상의 이유(장기간 로그인 등)로 작업이 거부되었을 때 예외 처리
+    // 재인증이 필요한 Firebase 작업 실패 시 로그인 화면으로 이동
     private void handleAuthError(Exception e) {
         if (e instanceof FirebaseAuthRecentLoginRequiredException) {
             Toast.makeText(this, "보안을 위해 다시 로그인 후 시도해주세요.", Toast.LENGTH_LONG).show();
@@ -226,13 +225,13 @@ public class SettingsActivity extends AppCompatActivity {
         }
     }
 
-    // 로그아웃 확인 팝업
+    // 로그아웃 확인 팝업 표시
     private void showLogoutDialog() {
         new AlertDialog.Builder(this)
                 .setMessage("로그아웃 하시겠습니까?")
                 .setPositiveButton("네", (d, w) -> {
                     auth.signOut();
-                    // 뒤로 가기로 다시 설정 화면에 올 수 없도록 스택 초기화 후 이동
+                    // 뒤로가기로 설정 화면에 다시 도라오지 않도록 스택 초기화
                     Intent intent = new Intent(this, LoginActivity.class);
                     intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
                     startActivity(intent);
@@ -240,7 +239,7 @@ public class SettingsActivity extends AppCompatActivity {
                 .setNegativeButton("아니요", null).show();
     }
 
-    // 회원 탈퇴 경고 팝업
+    // 회원 탈퇴 경고 팝업 표시
     private void showWithdrawDialog() {
         new AlertDialog.Builder(this)
                 .setTitle("탈퇴하기")
@@ -249,51 +248,52 @@ public class SettingsActivity extends AppCompatActivity {
                 .setNegativeButton("취소", null).show();
     }
 
-    // 실제 탈퇴 처리를 수행하는 로직 (Storage, Firestore 문서, Auth 계정 완전 삭제)
+    // 회원 탈퇴 시 Storage 이미지, Firestore 문서, Auth 계정을 삭제
     private void executeWithdrawal() {
         FirebaseUser user = auth.getCurrentUser();
         if (user == null) return;
 
         String uid = user.getUid();
 
-        // 해당 사용자의 모든 분석 결과(results) 검색
+        // 현재 사ㅛㅇ자의 분석 결과 목록 조회
         db.collection("results").whereEqualTo("uid", uid).get().addOnSuccessListener(query -> {
             for (DocumentSnapshot doc : query) {
                 String orig = doc.getString("originalUrl");
                 String heat = doc.getString("heatmapUrl");
 
-                // Storage에 업로드된 원본 및 히트맵 이미지 삭제
+                // Storage에 저장된 원본 이미지와 히트맵 이미지 삭제
                 if (orig != null) storage.getReferenceFromUrl(orig).delete();
                 if (heat != null) storage.getReferenceFromUrl(heat).delete();
 
-                // Firestore 문서(분석 결과) 삭제
+                // Firestore 분석 결과 문서 삭제
                 doc.getReference().delete();
             }
 
-            // Firestore의 사용자 정보(users) 문서 삭제
+            // Firestore 사용자 정보 문서 삭제
             db.collection("users").document(uid).delete().addOnSuccessListener(unused -> {
 
-                // 최종적으로 Authentication에서 사용자 계정 삭제
+                // Firebase Authentication 계정 삭제
                 user.delete().addOnSuccessListener(aVoid -> {
                     Toast.makeText(this, "탈퇴 되었습니다.", Toast.LENGTH_SHORT).show();
                     startActivity(new Intent(this, LoginActivity.class));
                     finish();
-                }).addOnFailureListener(this::handleAuthError); // 오랫동안 접속한 상태면 재로그인 요구
+                }).addOnFailureListener(this::handleAuthError);
             });
         });
     }
 
+    // 설정 화면 튜토리얼 실행 여부 확인
     private void checkAndRunTutorial() {
         SharedPreferences prefs = getSharedPreferences("TutorialPrefs", Context.MODE_PRIVATE);
         boolean needsTutorial = prefs.getBoolean("NEEDS_SETTINGS_TUTORIAL", false);
 
         if (needsTutorial) {
-            // 화면이 다 그려진 후 말풍선 띄우기
+            // 화면이 완전히 그려진 후 튜토리얼 말풍선 표시
             getWindow().getDecorView().post(() -> showSettingsTutorial(prefs));
         }
     }
 
-    // SettingsActivity.java의 showSettingsTutorial() 메서드 수정
+    // 설정 화면 튜토리얼 말풍선 표시
     private void showSettingsTutorial(SharedPreferences prefs) {
         View targetView = getWindow().getDecorView();
 
@@ -315,6 +315,7 @@ public class SettingsActivity extends AppCompatActivity {
                 .setDismissWhenClicked(true)
                 .build();
 
+        // 설정 튜토리얼 완료 사태 저장
         balloon.setOnBalloonDismissListener(() -> {
             prefs.edit()
                     .putBoolean("NEEDS_SETTINGS_TUTORIAL", false)

@@ -3,17 +3,19 @@ package com.capstone.aidetector;
 import java.io.Serializable;
 import java.util.Date;
 
+// 문의 내역 정보를 저장하고 화면 간 전달하기 위한 데이터 클래스
 public class InquiryRecord implements Serializable {
-    private String id; // 문서 ID
-    private String title;
-    private String body;
-    private String status; // "접수 완료", "답변 준비 중", "답변 완료"
+    private String id; // Firestore 문서 ID
+    private String title; // 문서 제목
+    private String body; // 문서 내용
+    private String status; // 문서 처리 상태
     private String reply; // 관리자 답변
-    private Date timestamp;
+    private Date timestamp; // 문의 작성 시간
 
-    public InquiryRecord() {} // Firestore 빈 생성자
+    // Firestore 자동 매핑을 위한 빈 생성자
+    public InquiryRecord() {}
 
-    // Getters & Setters
+    // 각 필드 접근 및 수정 메서드
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
     public String getTitle() { return title; }

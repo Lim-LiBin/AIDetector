@@ -22,12 +22,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
-// 말풍선 라이브러리 import
 import com.skydoves.balloon.Balloon;
 import com.skydoves.balloon.BalloonAnimation;
 import com.skydoves.balloon.BalloonSizeSpec;
 import com.skydoves.balloon.overlay.BalloonOverlayRect;
 
+// 분석 이력 목록 조회, 화면 전환, 선택 삭제 기능을 담당하는 화면
 public class HistoryActivity extends AppCompatActivity {
 
     private RecyclerView recyclerView;
@@ -35,7 +35,7 @@ public class HistoryActivity extends AppCompatActivity {
     private ImageButton btnToggleView;
     private LinearLayout layoutNormalBottom;
     private Button btnDeleteMode;
-    private ImageButton btnCancelMode; // 뒤로가기(취소) 아이콘
+    private ImageButton btnCancelMode;
 
     private List<HistoryRecord> historyList = new ArrayList<>();
     private HistoryAdapter adapter;
@@ -59,23 +59,19 @@ public class HistoryActivity extends AppCompatActivity {
 
         setupRecyclerView();
 
-        // 데이터 불러오기는 어댑터 세팅 이후에 진행 (loadData()는 삭제하고 중복 방지를 위해 제외)
-        // 실제 데이터 로딩은 onResume()의 fetchData()에서 일괄 처리하도록 놔둡니다.
-        //checkEmptyState();
-
-        // 뷰 모드 전환 버튼 이벤트
+        // 뷰 모드 전환 (리스트/그리드)
         btnToggleView.setOnClickListener(v -> {
             boolean isCurrentlyGallery = adapter.isGalleryMode();
             adapter.setGalleryMode(!isCurrentlyGallery);
             updateLayoutManager(!isCurrentlyGallery);
         });
 
-        // 취소 버튼 클릭 이벤트
+        // 선택 모드 취소
         btnCancelMode.setOnClickListener(v -> {
             exitSelectionMode();
         });
 
-        // 하단 [삭제하기] 버튼 클릭 이벤트
+        // 선택 항목 삭제 실행
         btnDeleteMode.setOnClickListener(v -> {
             if (adapter.getSelectedDocIds().isEmpty()) {
                 Toast.makeText(this, "삭제할 항목을 선택해주세요.", Toast.LENGTH_SHORT).show();
@@ -84,25 +80,25 @@ public class HistoryActivity extends AppCompatActivity {
             showDeleteConfirmDialog();
         });
 
-        // 뒤로가기 제어 - 선택 모드 해제
+        // 뒤로가기 제어 (선택 모드 해제 또는 액티비티 종료)
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
             @Override
             public void handleOnBackPressed() {
                 if (adapter != null && adapter.isSelectionMode()) {
                     exitSelectionMode();
                 } else {
-                    finish(); // 일반 뒤로가기
+                    finish();
                 }
             }
         });
 
-        // '홈' 탭 클릭 시 MainActivity로 돌아감
+        // 탭 이동 처리 (홈)
         TextView tabHome = findViewById(R.id.tabHome);
         if (tabHome != null) {
             tabHome.setOnClickListener(v -> finish());
         }
 
-        // '설정' 탭 클릭 시 SettingsActivity로 이동
+        // 탭 이동 처리 (설정)
         TextView tabSettings = findViewById(R.id.tabSettings);
         if (tabSettings != null) {
             tabSettings.setOnClickListener(v -> {
@@ -114,6 +110,7 @@ public class HistoryActivity extends AppCompatActivity {
         checkAndRunTutorial();
     }
 
+    // 이력 화면 튜토리얼 실행 여부 확인
     private void checkAndRunTutorial() {
         SharedPreferences prefs = getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
         boolean needsTutorial = prefs.getBoolean("NEEDS_HISTORY_TUTORIAL", false);
@@ -123,6 +120,7 @@ public class HistoryActivity extends AppCompatActivity {
         }
     }
 
+    // 이력 화면 튜토리얼 표시 후 설정 화면으로 이동
     private void showHistoryTutorial(SharedPreferences prefs) {
         View targetView = getWindow().getDecorView();
 
@@ -144,6 +142,7 @@ public class HistoryActivity extends AppCompatActivity {
                 .setDismissWhenClicked(true)
                 .build();
 
+        // 튜토리얼 종료 시 설정 화면 튜토리얼로 이어지도록 상태값 저장
         balloon.setOnBalloonDismissListener(() -> {
             prefs.edit()
                     .putBoolean("NEEDS_HISTORY_TUTORIAL", false)
@@ -160,16 +159,18 @@ public class HistoryActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        // ⭐️ 데이터 로드는 여기서만 진행하여 두 번 중복 호출되는 것을 막습니다.
+        // 화면 복귀 시 최신 분석 이력 다시 조회
         if (adapter != null) {
             fetchData();
         }
     }
 
+    // 분석 이력 RecyclerView 초기화 및 클릭 이벤트 설정
     private void setupRecyclerView() {
         adapter = new HistoryAdapter(this, new HistoryAdapter.OnItemClickListener() {
             @Override
             public void onShortClick(HistoryRecord record) {
+                // 이력 항목 클릭 시 결과 상세 화면으로 이동
                 Intent intent = new Intent(HistoryActivity.this, ResultActivity.class);
 
                 intent.putExtra("from_history", true);
@@ -186,6 +187,7 @@ public class HistoryActivity extends AppCompatActivity {
 
             @Override
             public void onLongClick() {
+                // 이력 항목 길게 클릭 시 선택 모드 진입
                 enterSelectionMode();
             }
 
@@ -198,12 +200,14 @@ public class HistoryActivity extends AppCompatActivity {
         recyclerView.setAdapter(adapter);
     }
 
+    // 분석 이력 목록 갱신
     public void updateData(List<HistoryRecord> newList) {
         this.historyList = newList;
         adapter.setItems(historyList);
         checkEmptyState();
     }
 
+    // 분석 이력 존재 여부에 따라 빈 화면 표시
     private void checkEmptyState() {
         if (historyList == null || historyList.isEmpty()) {
             tvEmpty.setVisibility(View.VISIBLE);
@@ -214,6 +218,7 @@ public class HistoryActivity extends AppCompatActivity {
         }
     }
 
+    // 리스트 보기와 갤러리 보기 전환
     private void updateLayoutManager(boolean isGallery) {
         if (isGallery) {
             recyclerView.setLayoutManager(new GridLayoutManager(this, 3));
@@ -224,6 +229,7 @@ public class HistoryActivity extends AppCompatActivity {
         }
     }
 
+    // 분석 이력 선택 모드 진입
     private void enterSelectionMode() {
         adapter.setSelectionMode(true);
         layoutNormalBottom.setVisibility(View.GONE);
@@ -232,6 +238,7 @@ public class HistoryActivity extends AppCompatActivity {
         btnToggleView.setVisibility(View.GONE);
     }
 
+    // 분석 이력 선택 모드 해제
     private void exitSelectionMode() {
         adapter.setSelectionMode(false);
         layoutNormalBottom.setVisibility(View.VISIBLE);
@@ -240,6 +247,7 @@ public class HistoryActivity extends AppCompatActivity {
         btnToggleView.setVisibility(View.VISIBLE);
     }
 
+    // 선택된 분석 이력 삭제 확인
     private void showDeleteConfirmDialog() {
         new AlertDialog.Builder(this)
                 .setTitle("삭제하시겠습니까?")
@@ -252,6 +260,7 @@ public class HistoryActivity extends AppCompatActivity {
 
                     List<HistoryRecord> copyList = new ArrayList<>(historyList);
 
+                    // 선택된 하목을 Firebase에서 삭제
                     for (HistoryRecord record : copyList) {
                         if (selectedIds.contains(record.getDocumentId())) {
                             firebaseManager.deleteHistory(record, () -> {
@@ -271,6 +280,7 @@ public class HistoryActivity extends AppCompatActivity {
                 .show();
     }
 
+    // Firebase에서 분석 이력 데이터 조회
     public void fetchData() {
         if (firebaseManager == null) {
             firebaseManager = new FirebaseManager();
@@ -286,6 +296,7 @@ public class HistoryActivity extends AppCompatActivity {
                         adapter.setItems(historyList);
                     }
 
+                    // 조회된 이력 여부에 따라 목록 또는 빈 화면 표시
                     if (historyList.isEmpty()) {
                         if (tvEmpty != null) tvEmpty.setVisibility(View.VISIBLE);
                         if (recyclerView != null) recyclerView.setVisibility(View.GONE);

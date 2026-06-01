@@ -4,9 +4,8 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#110E1B"> <!-- 판별 결과 배경색과 통일 -->
+    android:background="#110E1B">
 
-    <!-- 상단바 영역: 판별 결과 화면과 높이/위치 맞춤 -->
     <RelativeLayout
         android:id="@+id/topBar"
         android:layout_width="match_parent"
@@ -14,7 +13,6 @@
         android:layout_marginTop="40dp"
         app:layout_constraintTop_toTopOf="parent">
 
-        <!-- 뒤로가기 버튼 -->
         <ImageButton
             android:id="@+id/btn_back"
             android:layout_width="48dp"
@@ -25,7 +23,6 @@
             android:src="@drawable/ic_back"
             app:tint="#FFFFFF" />
 
-        <!-- 중앙 제목 -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -43,7 +40,6 @@
         android:background="#5A4FCF"
         app:layout_constraintTop_toBottomOf="@id/topBar" />
 
-    <!-- 입력 영역 -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -52,7 +48,6 @@
         app:layout_constraintTop_toBottomOf="@id/divider"
         app:layout_constraintBottom_toTopOf="@id/btn_contact_send">
 
-        <!-- 1. 제목 입력칸 (박스 형태) -->
         <EditText
             android:id="@+id/et_contact_title"
             android:layout_width="match_parent"
@@ -64,7 +59,6 @@
             android:padding="16dp"
             android:textSize="16sp" />
 
-        <!-- 2. 본문 입력칸 (큰 박스 형태) -->
         <EditText
             android:id="@+id/et_contact_body"
             android:layout_width="match_parent"
@@ -81,7 +75,6 @@
 
     </LinearLayout>
 
-    <!-- 하단 전송 버튼 -->
     <Button
         android:id="@+id/btn_contact_send"
         android:layout_width="match_parent"

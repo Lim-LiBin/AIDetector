@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
+// 문의 내역 목록을 RecyclerView에 표시하고 상세 화면 이동을 처리하는 Adapter
 public class InquiryHistoryAdapter extends RecyclerView.Adapter<InquiryHistoryAdapter.ViewHolder> {
     private List<InquiryRecord> items = new ArrayList<>();
     private Context context;
@@ -24,6 +25,7 @@ public class InquiryHistoryAdapter extends RecyclerView.Adapter<InquiryHistoryAd
         this.context = context;
     }
 
+    // 문의 내역 목록 갱신
     public void setItems(List<InquiryRecord> items) {
         this.items = items;
         notifyDataSetChanged();
@@ -32,6 +34,7 @@ public class InquiryHistoryAdapter extends RecyclerView.Adapter<InquiryHistoryAd
     @NonNull
     @Override
     public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+        // 문의 내역 항목 레이아웃 생성
         View v = LayoutInflater.from(context).inflate(R.layout.item_inquiry, parent, false);
         return new ViewHolder(v);
     }
@@ -39,6 +42,7 @@ public class InquiryHistoryAdapter extends RecyclerView.Adapter<InquiryHistoryAd
     @Override
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         InquiryRecord item = items.get(position);
+        // 문의 제목, 작성일, 처리 상태를 화면에 표시
         holder.tvTitle.setText(item.getTitle());
         holder.tvDate.setText(item.getTimestamp() != null ? sdf.format(item.getTimestamp()) : "");
 
@@ -48,7 +52,7 @@ public class InquiryHistoryAdapter extends RecyclerView.Adapter<InquiryHistoryAd
         GradientDrawable badge = new GradientDrawable();
         badge.setCornerRadius(20f);
 
-        // 배지 색상 로직
+        // 문의 상태에 따라 배지 색상과 글자색 설정
         if (status.equals("답변 완료")) {
             badge.setColor(Color.parseColor("#00D2FF"));
             holder.tvStatus.setTextColor(Color.BLACK);
@@ -61,7 +65,7 @@ public class InquiryHistoryAdapter extends RecyclerView.Adapter<InquiryHistoryAd
         }
         holder.tvStatus.setBackground(badge);
 
-        // 클릭 시 상세 페이지 이동
+        // 문의 항목 클릭 시 상세 화면으로 이동
         holder.itemView.setOnClickListener(v -> {
             Intent intent = new Intent(context, InquiryDetailActivity.class);
             intent.putExtra("inquiry_data", item);
@@ -72,6 +76,7 @@ public class InquiryHistoryAdapter extends RecyclerView.Adapter<InquiryHistoryAd
     @Override
     public int getItemCount() { return items.size(); }
 
+    // 문의 내역 항목의 View를 보관하는 ViewHolder
     class ViewHolder extends RecyclerView.ViewHolder {
         TextView tvTitle, tvDate, tvStatus;
         public ViewHolder(@NonNull View itemView) {

@@ -11,6 +11,7 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import com.google.firebase.auth.FirebaseAuth;
 
+// Firebase Authentication을 이용한 로그인 화면
 public class LoginActivity extends AppCompatActivity {
 
     private EditText emailInput, pwInput;
@@ -25,19 +26,20 @@ public class LoginActivity extends AppCompatActivity {
 
         auth = FirebaseAuth.getInstance();
 
-        // 1. 자동 로그인 체크 (로그인 되어 있으면 바로 메인으로)
+        // 이미 로그인된 사용자는 메인 화면으로 바로 이동
         if (auth.getCurrentUser() != null) {
             moveToMain();
-            return; // 자동 로그인 시 아래 리스너 설정은 건너뜀
+            return;
         }
 
-        // 2. 뷰 초기화 (onCreate에서 수행해야 함)
+        // 로그인 화면 View 초기화
         initViews();
 
-        // 3. 리스너 설정
+        // 버튼 및 텍스트 클릭 이벤트 설정
         setupListeners();
     }
 
+    // 로그인 화면에서 사용하는 View 연결
     private void initViews() {
         emailInput = findViewById(R.id.email_input);
         pwInput = findViewById(R.id.pw_input);
@@ -46,41 +48,44 @@ public class LoginActivity extends AppCompatActivity {
         findPwText = findViewById(R.id.find_pw_text);
     }
 
+    // 로그인, 회원가입, 비밀번호 찾기 이동 이벤트 설정
     private void setupListeners() {
-        // [로그인 버튼 클릭]
+        // 로그인 버튼 클릭 시 로그인 시도
         loginBtn.setOnClickListener(v -> performLogin());
 
-        // [회원가입 텍스트 클릭] -> 이제 정상 작동합니다.
+        // 회원가입 화면으로 이동
         goToSignupText.setOnClickListener(v -> {
             Intent intent = new Intent(LoginActivity.this, SignupActivity.class);
             startActivity(intent);
         });
 
-        // [비밀번호 찾기 클릭]
+        // 비밀번호 재설정 화면으로 이동
         findPwText.setOnClickListener(v -> {
             Intent intent = new Intent(LoginActivity.this, FindPasswordActivity.class);
             startActivity(intent);
         });
     }
 
+    // 입력값 검증 후 Firebase 로그인 요청
     private void performLogin() {
         String email = emailInput.getText().toString().trim();
         String password = pwInput.getText().toString().trim();
 
-        // 빈칸 검사
+        // 이메일 입력 여부 확인
         if (email.isEmpty()) {
             emailInput.setError("아이디(이메일)를 입력해주세요.");
             emailInput.requestFocus();
             return;
         }
 
+        // 비밀번호 입력 여부 확인
         if (password.isEmpty()) {
             pwInput.setError("비밀번호를 입력해주세요.");
             pwInput.requestFocus();
             return;
         }
 
-        // Firebase 로그인 시도
+        // Firebase Authentication으로 로그인 시도
         auth.signInWithEmailAndPassword(email, password)
                 .addOnSuccessListener(authResult -> {
                     Toast.makeText(this, "환영합니다!", Toast.LENGTH_SHORT).show();
@@ -91,9 +96,10 @@ public class LoginActivity extends AppCompatActivity {
                 );
     }
 
+    // 로그인 성공 후 메인 화면으로 이동
     private void moveToMain() {
         Intent intent = new Intent(LoginActivity.this, MainActivity.class);
         startActivity(intent);
-        finish(); // 로그인 화면 종료
+        finish();
     }
 }
