@@ -5,10 +5,8 @@ import os
 
 class VideoProcessor:
     def __init__(self, model):
-        """model은 ModelInference 인스턴스"""
         self.model = model
 
-        # xml 파일 지정
         base_path = os.path.dirname(os.path.abspath(__file__))
         xml_path = os.path.join(base_path, 'haarcascade_frontalface_default.xml')
 
@@ -18,14 +16,10 @@ class VideoProcessor:
         self.face_cascade = cv2.CascadeClassifier(xml_path)
 
     def process_video(self, url):
-        """
-        영상 URL을 받아서 프레임별 분석 후 결과 반환
-        """
         print(f"[영상 처리 시작] URL: {url}")
 
-        # 1. yt-dlp로 스트리밍 URL 추출
         ydl_opts = {
-            'format': 'best[height<=720]/best[height<=480]/best',
+            'format': 'best',
             'quiet': True,
             'no_warnings': True,
             'nocheckcertificate': True,
@@ -42,7 +36,6 @@ class VideoProcessor:
 
         print("[스트리밍 URL 추출 완료]")
 
-        # 2. OpenCV로 영상 열기
         cap = cv2.VideoCapture(video_url)
 
         if not cap.isOpened():
@@ -54,10 +47,10 @@ class VideoProcessor:
 
         print(f"[영상 FPS] {fps}")
 
-        # 3. 프레임 분석
         max_prob = 0.0
         best_frame = None
         best_heatmap = None
+        best_face_coords = None
         frame_count = 0
         analyzed_count = 0
 
@@ -73,13 +66,20 @@ class VideoProcessor:
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                 faces = self.face_cascade.detectMultiScale(gray, 1.1, 5, minSize=(50, 50))
 
+                face_coords = None
                 if len(faces) > 0:
                     x, y, w, h = max(faces, key=lambda f: f[2]*f[3])
-                    pw, ph = int(w*0.15), int(h*0.15)
+                    pw, ph = int(w*0.2), int(h*0.2)
                     x1, y1 = max(x-pw, 0), max(y-ph, 0)
                     x2, y2 = min(x+w+pw, frame.shape[1]), min(y+h+ph, frame.shape[0])
                     face_img = frame[y1:y2, x1:x2]
                     result = self.model.run_inference(face_img)
+                    face_coords = {
+                        "x1": int(x1),
+                        "y1": int(y1),
+                        "cropW": int(x2 - x1),
+                        "cropH": int(y2 - y1)
+                    }
                 else:
                     result = self.model.run_inference(frame)
 
@@ -90,6 +90,7 @@ class VideoProcessor:
                     max_prob = prob
                     best_frame = frame
                     best_heatmap = heatmap
+                    best_face_coords = face_coords
 
             frame_count += 1
 
@@ -100,30 +101,38 @@ class VideoProcessor:
         if best_frame is None:
             raise Exception("분석 가능한 프레임이 없습니다")
 
-        # 4. 결과 판별
         result = "Fake" if max_prob >= 0.5 else "Real"
 
-        # 5. 프레임 이미지 압축
         height, width = best_frame.shape[:2]
         max_dimension = 640
+        scale = 1.0
         if max(height, width) > max_dimension:
             scale = max_dimension / max(height, width)
             new_width = int(width * scale)
             new_height = int(height * scale)
             best_frame = cv2.resize(best_frame, (new_width, new_height))
 
+        # 프레임 리사이즈했으면 좌표도 스케일 맞춤
+        if best_face_coords and scale != 1.0:
+            best_face_coords = {
+                "x1": int(best_face_coords["x1"] * scale),
+                "y1": int(best_face_coords["y1"] * scale),
+                "cropW": int(best_face_coords["cropW"] * scale),
+                "cropH": int(best_face_coords["cropH"] * scale)
+            }
+
         encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 50]
         _, buffer = cv2.imencode('.jpg', best_frame, encode_param)
         frame_base64 = base64.b64encode(buffer).decode('utf-8')
 
-        # 6. 히트맵 변환
         heatmap_list = best_heatmap
 
-        print(f"[응답 전송] result={result}, prob={max_prob:.4f}")
+        print(f"[응답 전송] result={result}, prob={max_prob:.4f}, face_coords={best_face_coords}")
 
         return {
             "result": result,
             "probability": float(max_prob),
             "heatmap": heatmap_list,
-            "frame": frame_base64
+            "frame": frame_base64,
+            "face_coords": best_face_coords
         }
