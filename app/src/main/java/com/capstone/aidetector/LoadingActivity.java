@@ -227,9 +227,9 @@ public class LoadingActivity extends AppCompatActivity {
                             int w = bounds.width();
                             int h = bounds.height();
 
-                            // 얼굴 주변 영역까지 포함하도록 패딩 적용
-                            int pw = (int) (w * 0.15f);
-                            int ph = (int) (h * 0.15f);
+                            // 얼굴 패딩
+                            int pw = (int) (w * 0.20f);
+                            int ph = (int) (h * 0.20f);
 
                             x1 = Math.max(bounds.left - pw, 0);
                             y1 = Math.max(bounds.top - ph, 0);
@@ -413,8 +413,8 @@ public class LoadingActivity extends AppCompatActivity {
                 int w = bounds.width();
                 int h = bounds.height();
 
-                int pw = (int) (w * 0.15);
-                int ph = (int) (h * 0.15);
+                int pw = (int) (w * 0.20);
+                int ph = (int) (h * 0.20);
 
                 x1 = Math.max(x - pw, 0);
                 y1 = Math.max(y - ph, 0);
