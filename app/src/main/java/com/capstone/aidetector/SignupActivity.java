@@ -1,7 +1,6 @@
 package com.capstone.aidetector;
 
 import android.app.Dialog;
-import android.content.Intent;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.os.Bundle;
@@ -25,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 
+// 회원가입 입력값 검증, 이메일 중복 확인, 약관 동의 및 Firebase 회원가입을 담당하는 화면
 public class SignupActivity extends AppCompatActivity {
 
     private EditText nameInput, emailInput, pwInput, pwConfirmInput, phoneInput;
@@ -36,8 +36,10 @@ public class SignupActivity extends AppCompatActivity {
     private FirebaseAuth auth;
     private FirebaseFirestore db;
 
-    private boolean isEmailChecked = false; // 중복 확인 여부
-    private static final String PW_PATTERN = "^(?=.*[A-Za-z])(?=.*\\d).{8,}$"; // 8자 이상, 영문+숫자
+    private boolean isEmailChecked = false; // 이메일 중복 확인 완료 여부
+    // 비밀번호는 8자 이상이며 영문과 숫자를 포함해야 함
+    private static final String PW_PATTERN = "^(?=.*[A-Za-z])(?=.*\\d).{8,}$";
+    // 전화번호는 010-0000-0000 형식만 허용
     private static final String PHONE_PATTERN = "^010-\\d{4}-\\d{4}$";
 
     @Override
@@ -50,9 +52,12 @@ public class SignupActivity extends AppCompatActivity {
 
         initViews();
         setupListeners();
-        updateButtonAppearance(); // 초기 버튼 상태 설정
+
+        // 초기 입력 상태에 맞게 회원가입 버튼 상태 설정
+        updateButtonAppearance();
     }
 
+    // XML에 정의된 View를 변수와 연결
     private void initViews() {
         backBtn = findViewById(R.id.back_btn);
         nameInput = findViewById(R.id.name_input);
@@ -67,20 +72,21 @@ public class SignupActivity extends AppCompatActivity {
         termsCheckbox = findViewById(R.id.terms_checkbox);
     }
 
+    // 버튼 클릭 및 입력밧 변경 이벤트 설정
     private void setupListeners() {
-        // 뒤로가기
+        // 뒤로가기 버튼 클릭 시 현재 화면 종료
         backBtn.setOnClickListener(v -> finish());
 
-        // 이메일 중복 확인
+        // 이메일 중복 확인 실행
         checkBtn.setOnClickListener(v -> checkEmailDuplicate());
 
-        // 실시간 입력 감지 (유효성 검사 및 버튼 상태 갱신)
+        // 입력값 변경 시 유효성 검사와 버튼 상태 갱신
         TextWatcher inputWatcher = new TextWatcher() {
             @Override
             public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
             @Override
             public void onTextChanged(CharSequence s, int start, int before, int count) {
-                // 이메일 내용이 바뀌면 중복확인 다시 해야함
+                // 이메일이 변경되면 중복 확인 상태 초기화
                 if (emailInput.hasFocus()) {
                     isEmailChecked = false;
                     checkBtn.setText("중복 확인");
@@ -98,16 +104,17 @@ public class SignupActivity extends AppCompatActivity {
         pwConfirmInput.addTextChangedListener(inputWatcher);
         phoneInput.addTextChangedListener(inputWatcher);
 
-        // 약관 동의 다이얼로그
+        // 약관 체크박스 클릭 시 약관 동의 다이얼로그 표시
         termsCheckbox.setOnClickListener(v -> {
             termsCheckbox.setChecked(false);
             showTermsDialog();
         });
 
-        // 회원가입 완료 버튼
+        // 회원가입 버튼 클릭 시 가입 처리
         signupBtn.setOnClickListener(v -> performSignup());
     }
 
+    // Firebase Authentication을 이용해 이메일 중복 여부 확인
     private void checkEmailDuplicate() {
         String email = emailInput.getText().toString().trim();
         if (email.isEmpty() || !Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
@@ -132,6 +139,7 @@ public class SignupActivity extends AppCompatActivity {
         });
     }
 
+    // 비밀번호 형식과 비밀번호 확인 일치 여부를 실시간 검사
     private void checkPasswordRealTime() {
         String pw = pwInput.getText().toString().trim();
         String pwConfirm = pwConfirmInput.getText().toString().trim();
@@ -145,6 +153,7 @@ public class SignupActivity extends AppCompatActivity {
         else pwConfirmLayout.setError(null);
     }
 
+    // 모든 입력 조건을 만족하는 경우에만 회원가입 버튼 활성화
     private void updateButtonAppearance() {
         boolean isAllValid = !nameInput.getText().toString().trim().isEmpty()
                 && isEmailChecked
@@ -164,6 +173,7 @@ public class SignupActivity extends AppCompatActivity {
         }
     }
 
+    // Firebase Authentication 계정 생성 후 Firestore에 사용자 정보 저장
     private void performSignup() {
         String email = emailInput.getText().toString().trim();
         String password = pwInput.getText().toString().trim();
@@ -182,16 +192,18 @@ public class SignupActivity extends AppCompatActivity {
                             .addOnSuccessListener(aVoid -> {
                                 Toast.makeText(this, "회원가입 성공!", Toast.LENGTH_SHORT).show();
 
-                                // ⭐️ [추가] 새로 가입한 회원이므로 기기 내 튜토리얼 시청 기록을 '안 봄(false)'으로 초기화합니다.
+                                // 신규 회원은 메인 튜토리얼을 다시 볼 수 있도록 상태 초기화
                                 android.content.SharedPreferences prefs = getSharedPreferences("TutorialPrefs", android.content.Context.MODE_PRIVATE);
                                 prefs.edit().putBoolean("HasSeenMainTutorial", false).apply();
 
-                                finish(); // 회원가입 화면 닫기 (로그인 화면으로 이동)
+                                // 회원가입 완료 후 로그인 화면으로 돌아감
+                                finish();
                             });
                 })
                 .addOnFailureListener(e -> Toast.makeText(this, "가입 실패: " + e.getMessage(), Toast.LENGTH_SHORT).show());
     }
 
+    // 약관 동의 다이얼로그 표시
     private void showTermsDialog() {
         Dialog dialog = new Dialog(this);
         dialog.setContentView(R.layout.dialog_terms);
@@ -201,6 +213,7 @@ public class SignupActivity extends AppCompatActivity {
         Button btnConfirm = dialog.findViewById(R.id.btn_confirm);
         Button btnClose = dialog.findViewById(R.id.btn_close);
 
+        // 약관에 도의한 경우에만 확인 버튼 활성화
         dialogCheckbox.setOnCheckedChangeListener((v, isChecked) -> btnConfirm.setEnabled(isChecked));
         btnClose.setOnClickListener(v -> dialog.dismiss());
         btnConfirm.setOnClickListener(v -> {
