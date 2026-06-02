@@ -452,7 +452,6 @@ public class LoadingActivity extends AppCompatActivity {
                 Bitmap frameBitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
                 float prob = res.getProbability() * 100f;
 
-                // 서버에서 받은 히트맵 리스트를 2차원 배열로 변환
                 List<List<Float>> heatmapList = res.getHeatmap();
                 float[][] heatmapMatrix = new float[heatmapList.size()][heatmapList.get(0).size()];
                 for (int i = 0; i < heatmapList.size(); i++) {
@@ -461,14 +460,30 @@ public class LoadingActivity extends AppCompatActivity {
                     }
                 }
 
-                finalizeAnalysis(frameBitmap, prob, heatmapMatrix, 0, 0, frameBitmap.getWidth(), frameBitmap.getHeight());
+                // 서버에서 받은 얼굴 좌표 사용
+                Map<String, Integer> coords = res.getFaceCoords();
+                int x1, y1, cropW, cropH;
+
+                if (coords != null) {
+                    x1 = coords.get("x1");
+                    y1 = coords.get("y1");
+                    cropW = coords.get("cropW");
+                    cropH = coords.get("cropH");
+                } else {
+                    // 얼굴 검출 안 됐으면 전체 프레임
+                    x1 = 0;
+                    y1 = 0;
+                    cropW = frameBitmap.getWidth();
+                    cropH = frameBitmap.getHeight();
+                }
+
+                finalizeAnalysis(frameBitmap, prob, heatmapMatrix, x1, y1, cropW, cropH);
             } catch (Exception e) {
                 Log.e(TAG, "영상 결과 처리 오류", e);
                 finishWithError("결과 처리 중 오류 발생");
             }
         }).start();
     }
-
     // URL 안정성 검사 후 문제가 없거나 사용자가 진행을 선택하면 다음 분석 단계 실행
     private void checkUrlThenProceed(String url, Runnable onSafe) {
         Log.d(TAG, "URL 검사 시작: " + url);
