@@ -3,16 +3,16 @@ package com.capstone.aidetector;
 import android.app.AlertDialog;
 import android.content.Context;
 
+// URL 안전성 검사 결과에 따라 경고 또는 안내 다이얼로그를 표시하는 클래스
 public class UrlCheckDialog {
 
+    // 사용자의 URL 접속 여부 선택 결과를 전달하는 인터페이스
     public interface OnUserDecision {
-        void onProceed();   // 사용자가 "그래도 진행" 선택
-        void onBlock();     // 사용자가 "차단" 선택
+        void onProceed();
+        void onBlock();
     }
 
-    /**
-     * 위험 도메인 경고 다이얼로그
-     */
+    // 위험 도메인 경고 다이얼로그 표시
     public static void showWarning(Context context, UrlCheckResponse response, OnUserDecision listener) {
         String title = "⚠️ 위험한 링크 감지";
 
@@ -32,9 +32,7 @@ public class UrlCheckDialog {
                 .show();
     }
 
-    /**
-     * 안전 도메인 알림 (선택사항 - 필요 없으면 안 써도 됨)
-     */
+    // 안전 도메인 안내 다이얼로그 표시
     public static void showSafe(Context context, UrlCheckResponse response, Runnable onConfirm) {
         new AlertDialog.Builder(context)
                 .setTitle("✅ 안전한 링크")
