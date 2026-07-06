@@ -48,7 +48,7 @@
 
 <table>
   <tr>
-    <th align="center" width="16%">1. 메인 화면 (Home)</th>
+    <th align="center" width="16%">1. 메인 화면</th>
     <th align="center" width="32%" colspan="2">2. 이미지/URL 가져오기</th>
     <th align="center" width="32%" colspan="2">3. AI 분석 및 결과 화면</th>
     <th align="center" width="16%">4. 이력 확인 탭</th>
@@ -80,6 +80,7 @@
     <td valign="top" align="center">검사 리포트 리스트 레이아웃 제공, Firebase DB 기반 날짜별 이력 로드</td>
   </tr>
 </table>
+
 ## 📊 5. 정량적 성능 및 달성 결과
 정상 이미지 100장과 AI 생성/변조 이미지 40장으로 구성된 내부 샘플 데이터셋을 통해 검증을 수행한 정량적 성능 결과 지표이다.
 
